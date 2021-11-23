@@ -1,8 +1,9 @@
 [tool.poetry]
 name = "sqlgraphql"
 version = "0.1.0"
-description = ""
+description = "Library for generating SQL queries from GraphQL queries using graphene."
 authors = ["Nejc Skofic <nejc.skofic@gmail.com>"]
+license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.7"
