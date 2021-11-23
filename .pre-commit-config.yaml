@@ -1,19 +1,30 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
--   repo: https://gitlab.com/pycqa/flake8
-    rev: 4.0.1
+-   repo: local
     hooks:
     -   id: flake8
--   repo: https://github.com/psf/black
-    rev: 21.11b1
-    hooks:
-      - id: black
--   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v0.910
-    hooks:
-        - id: mypy
--   repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
-    hooks:
+        name: flake8
+        entry: flake8
+        language: python
+        types: [python]
+        require_serial: true
+    -   id: black
+        name: black
+        entry: black
+        language: python
+        types_or: [python, pyi]
+        require_serial: true
+    -   id: mypy
+        name: mypy
+        entry: mypy
+        language: python
+        types_or: [python, pyi]
+        require_serial: true
     -   id: isort
+        name: isort
+        entry: isort
+        language: python
+        types_or: [cython, python, pyi]
+        args: ['--filter-files']
+        require_serial: true
