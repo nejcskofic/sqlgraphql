@@ -19,6 +19,7 @@ flake8 = "^4.0.1"
 black = {version = "^21.11b1", allow-prereleases = true}
 mypy = "^0.910"
 isort = "^5.10.1"
+sqlalchemy-stubs = "^0.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -28,6 +29,7 @@ build-backend = "poetry.core.masonry.api"
 line-length = 79
 
 [tool.mypy]
+plugins = "sqlmypy"
 warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_any_generics = true
