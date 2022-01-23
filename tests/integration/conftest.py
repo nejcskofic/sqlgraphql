@@ -1,11 +1,10 @@
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from sqlalchemy import Column, Date, Integer, String, create_engine
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
-
-Base = declarative_base()
+from sqlalchemy.future import Engine
+from sqlalchemy.orm import DeclarativeMeta, Session, declarative_base, sessionmaker
 
 if TYPE_CHECKING:
 
@@ -20,6 +19,9 @@ else:
     SessionFactory = sessionmaker
 
 
+Base = cast(DeclarativeMeta, declarative_base())
+
+
 class UserDB(Base):
     __tablename__ = "users"
 
@@ -28,13 +30,17 @@ class UserDB(Base):
     registration_date = Column(Date, nullable=False)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def session_factory(tmp_path_factory) -> SessionFactory:
+@pytest.fixture(scope="session")
+def database_engine(tmp_path_factory) -> Engine:
     db_path = tmp_path_factory.mktemp("db").joinpath("test.db")
     connection_string = f"sqlite:///{db_path}"
-    engine = create_engine(connection_string)
-    Base.metadata.create_all(bind=engine)
-    return SessionFactory(bind=engine, future=True)
+    return create_engine(connection_string)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def session_factory(database_engine) -> SessionFactory:
+    Base.metadata.create_all(bind=database_engine)
+    return SessionFactory(bind=database_engine, future=True)
 
 
 @pytest.fixture(scope="session", autouse=True)

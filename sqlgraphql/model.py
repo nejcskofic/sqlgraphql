@@ -1,14 +1,15 @@
-import datetime
 from typing import Any, Dict, Optional, Tuple, Type
 
-from graphene import ID, Date, Field, Int, Scalar, String
+from graphene import ID, Field, Scalar
 from graphene.types.objecttype import ObjectType, ObjectTypeOptions
 from sqlalchemy import Column, sql
 from sqlalchemy.sql import elements, type_api
 
+from sqlgraphql.converters import TypeRegistry
+
 
 class QueryableTypeOptions(ObjectTypeOptions):
-    base_query: sql.Select = None  # type: ignore
+    base_query: sql.Select = None  # type: ignore[assignment]
 
 
 class QueryableObjectType(ObjectType):
@@ -65,7 +66,15 @@ def _get_graphene_type(
     column: elements.ColumnClause,
 ) -> Tuple[Type[Scalar], bool]:
     column_type: type_api.TypeEngine = column.type
-    python_type = column_type.python_type
+    python_type = None
+    try:
+        python_type = column_type.python_type
+    except NotImplementedError:
+        pass
+
+    if python_type is None:
+        raise ValueError(f"Cannot convert type '{column_type!r}' into graphene type.")
+
     if isinstance(column, Column):
         if column.primary_key:
             return ID, False
@@ -76,18 +85,8 @@ def _get_graphene_type(
         # We cannot track computed column's nullability
         is_optional = True
 
-    graphene_type: Type[Scalar]
-    if python_type == str:
-        graphene_type = String
-    elif python_type == int:
-        graphene_type = Int
-    elif python_type == datetime.date:
-        graphene_type = Date
-    else:
-        # TODO: proper implementation which takes into account:
-        #       - database type
-        #       - python type (potentially)
-        #       - nullability?
-        raise AssertionError(f"Invalid type: {python_type}")
+    graphene_type = TypeRegistry.get(python_type)
+    if graphene_type is None:
+        raise ValueError(f"Cannot convert type '{python_type!r}' into graphene type.")
 
     return graphene_type, is_optional
