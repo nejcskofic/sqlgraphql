@@ -1,3 +1,4 @@
+import enum
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Optional
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Enum,
     Float,
     Integer,
     LargeBinary,
@@ -28,10 +30,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.type_api import TypeEngine
-from sqlalchemy_utils import UUIDType
+from sqlalchemy_utils import ChoiceType, UUIDType
 
 from sqlgraphql.factories import ExecutionContext, QueryableList
 from sqlgraphql.model import QueryableObjectType
+
+
+class DummyEnum(enum.Enum):
+    ONE = 1
+    TWO = 2
+    THREE = 3
 
 
 class TestColumnTypeConversion:
@@ -64,6 +72,8 @@ class TestColumnTypeConversion:
             (Boolean, True, True),
             (Date, date(2020, 1, 2), "2020-01-02"),
             (DateTime, datetime(2020, 1, 2, 3, 4, 5), "2020-01-02T03:04:05"),
+            (Enum(DummyEnum), DummyEnum.TWO, "TWO"),
+            (Enum("A", "B"), "A", "A"),
             (Float, 1.1, 1.1),
             (Integer, 1, 1),
             (LargeBinary, b"1234", "MTIzNA=="),
@@ -76,6 +86,8 @@ class TestColumnTypeConversion:
             (UnicodeText, "žâü", "žâü"),
             # sqlalchemy utils types
             (UUIDType, UUID(int=1), "00000000-0000-0000-0000-000000000001"),
+            (ChoiceType([("A", 1), ("B", 2)]), "A", "A"),
+            (ChoiceType(DummyEnum, impl=Integer()), DummyEnum.THREE, "THREE"),
         ],
     )
     def test_type_conversion(

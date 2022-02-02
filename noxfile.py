@@ -1,12 +1,12 @@
 import nox
-import nox_poetry
+import nox_poetry  # type: ignore[import]
 
 nox.options.default_venv_backend = "conda"
 
 
 @nox_poetry.session(python=["3.9", "3.8", "3.7"])
 def tests(session: nox_poetry.Session) -> None:
-    session.install("pytest", "pytest-cov", ".")
+    session.install("pytest", "pytest-cov", "sqlalchemy_utils", ".")
     session.run("pytest", "--cov=sqlgraphql", "tests/")
 
 

@@ -36,6 +36,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_any_generics = false
 disallow_untyped_defs = true
+mypy_path = ["$MYPY_CONFIG_FILE_DIR/stubs/"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

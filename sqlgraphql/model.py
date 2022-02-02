@@ -1,11 +1,11 @@
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, Optional, Tuple
 
-from graphene import ID, Field, Scalar
+from graphene import Field
 from graphene.types.objecttype import ObjectType, ObjectTypeOptions
-from sqlalchemy import Column, sql
-from sqlalchemy.sql import elements, type_api
+from sqlalchemy import sql
+from sqlalchemy.sql import elements
 
-from sqlgraphql.converters import TypeRegistry
+from sqlgraphql.builders import build_field
 
 
 class QueryableTypeOptions(ObjectTypeOptions):
@@ -44,8 +44,7 @@ class QueryableObjectType(ObjectType):
             if name in fields:
                 raise ValueError(f"Duplicate field with name '{name}' detected")
 
-            graphene_type, is_optional = _get_graphene_type(column)
-            fields[name] = Field(graphene_type, required=not is_optional)
+            fields[name] = build_field(column)
 
         _meta.base_query = base_query
         if _meta.fields:
@@ -60,33 +59,3 @@ class QueryableObjectType(ObjectType):
             _meta=_meta,
             **options,
         )
-
-
-def _get_graphene_type(
-    column: elements.ColumnClause,
-) -> Tuple[Type[Scalar], bool]:
-    column_type: type_api.TypeEngine = column.type
-    python_type = None
-    try:
-        python_type = column_type.python_type
-    except NotImplementedError:
-        pass
-
-    if python_type is None:
-        raise ValueError(f"Cannot convert type '{column_type!r}' into graphene type.")
-
-    if isinstance(column, Column):
-        if column.primary_key:
-            return ID, False
-
-        # TODO May not be True if table is left joined
-        is_optional = column.nullable
-    else:
-        # We cannot track computed column's nullability
-        is_optional = True
-
-    graphene_type = TypeRegistry.get(python_type)
-    if graphene_type is None:
-        raise ValueError(f"Cannot convert type '{python_type!r}' into graphene type.")
-
-    return graphene_type, is_optional
