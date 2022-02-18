@@ -3,6 +3,7 @@ from functools import singledispatch
 from typing import List, Optional, Type, cast
 
 import graphene
+from graphene import JSONString
 from graphene.types.unmountedtype import UnmountedType
 from sqlalchemy import Column, Enum
 from sqlalchemy.sql.elements import ColumnClause
@@ -89,3 +90,9 @@ if _HAS_SQLALCHEMY_UTILS:
             return registry.current().get_or_build_enum(
                 column.name, lambda name: cast(Type[graphene.Enum], graphene.Enum(name, choices))
             )
+
+    @convert_from_db_type.register
+    def _(db_type: sqlalchemy_utils.JSONType, column: ColumnClause) -> Type[UnmountedType]:
+        # Alternative would be to use GenericScalar which is effectively
+        # any type
+        return JSONString

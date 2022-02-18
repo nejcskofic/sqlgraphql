@@ -30,7 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.type_api import TypeEngine
-from sqlalchemy_utils import ChoiceType, UUIDType
+from sqlalchemy_utils import ChoiceType, JSONType, UUIDType
 
 from sqlgraphql.factories import ExecutionContext, QueryableList
 from sqlgraphql.model import QueryableObjectType
@@ -88,6 +88,7 @@ class TestColumnTypeConversion:
             (UUIDType, UUID(int=1), "00000000-0000-0000-0000-000000000001"),
             (ChoiceType([("A", 1), ("B", 2)]), "A", "A"),
             (ChoiceType(DummyEnum, impl=Integer()), DummyEnum.THREE, "THREE"),
+            (JSONType, {"m1": "a", "m2": 1}, '{"m1": "a", "m2": 1}'),
         ],
     )
     def test_type_conversion(
