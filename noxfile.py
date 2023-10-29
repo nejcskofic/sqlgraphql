@@ -1,6 +1,6 @@
 import os
 
-import nox
+import nox  # type:ignore[import-not-found]
 
 nox.options.default_venv_backend = "conda"
 os.environ.update({"PDM_IGNORE_SAVED_PYTHON": "1"})

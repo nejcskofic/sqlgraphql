@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from graphene import Field
 from graphene.types.objecttype import ObjectType, ObjectTypeOptions
@@ -20,9 +20,9 @@ class QueryableObjectType(ObjectType):
         cls,
         interfaces: tuple[Any, ...] = (),
         possible_types: tuple[Any, ...] = (),
-        default_resolver: Optional[Any] = None,
-        base_query: Optional[sql.Select] = None,
-        _meta: Optional[QueryableTypeOptions] = None,
+        default_resolver: Any | None = None,
+        base_query: sql.Select | None = None,
+        _meta: QueryableTypeOptions | None = None,
         **options: Any,
     ) -> None:
         if _meta is None:

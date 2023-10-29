@@ -1,6 +1,6 @@
 import enum
 from functools import singledispatch
-from typing import Optional, cast
+from typing import cast
 
 import graphene
 from graphene import JSONString
@@ -59,7 +59,7 @@ def convert_from_db_type(db_type: TypeEngine, column: ColumnClause) -> type[Unmo
 
 @convert_from_db_type.register
 def _(db_type: Enum, column: ColumnClause) -> type[UnmountedType]:
-    enum_class: Optional[type[Enum]] = db_type.enum_class  # type: ignore[attr-defined]
+    enum_class: type[Enum] | None = db_type.enum_class  # type: ignore[attr-defined]
     if enum_class is not None:
         return registry.current().get_or_build_enum(
             enum_class.__name__, lambda name: graphene.Enum.from_enum(enum_class)

@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 import graphene
@@ -45,7 +45,7 @@ class DummyEnum(enum.Enum):
 class TestColumnTypeConversion:
     @pytest.fixture()
     def table_factory(self, database_engine):
-        table: Optional[Table] = None
+        table: Table | None = None
         metadata = MetaData()
 
         def factory(db_type: TypeEngine, value: Any) -> Table:

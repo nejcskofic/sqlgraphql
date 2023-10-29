@@ -2,7 +2,6 @@ import weakref
 from collections.abc import MutableMapping
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 import graphene
@@ -14,7 +13,7 @@ class _TypeMappingRegistry:
 
     def __init__(self) -> None:
         self._data: dict[type, type[Scalar]] = {}
-        self._cache: MutableMapping[type, Optional[type[Scalar]]] = weakref.WeakKeyDictionary()
+        self._cache: MutableMapping[type, type[Scalar] | None] = weakref.WeakKeyDictionary()
 
     def register(self, python_type: type, graphene_type: type[Scalar]) -> None:
         self._data[python_type] = graphene_type
@@ -24,18 +23,18 @@ class _TypeMappingRegistry:
         self._data.update(mappings)
         self._cache.clear()
 
-    def get(self, python_type: type) -> Optional[type[Scalar]]:
+    def get(self, python_type: type) -> type[Scalar] | None:
         try:
             return self._cache[python_type]
         except KeyError:
             try:
-                gql_type: Optional[type[Scalar]] = self._data[python_type]
+                gql_type: type[Scalar] | None = self._data[python_type]
             except KeyError:
                 gql_type = self._find_type(python_type)
             self._cache[python_type] = gql_type
             return gql_type
 
-    def _find_type(self, python_type: type) -> Optional[type[Scalar]]:
+    def _find_type(self, python_type: type) -> type[Scalar] | None:
         # we already tried current type, we just need to visit bases
         for base_type in python_type.mro()[1:]:
             if base_type in self._data:
