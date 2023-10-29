@@ -1,6 +1,6 @@
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Callable, Dict, Iterator, Type
 
 import graphene
 
@@ -9,11 +9,11 @@ class _Registry:
     __slots__ = ("_enums",)
 
     def __init__(self) -> None:
-        self._enums: Dict[str, Type[graphene.Enum]] = {}
+        self._enums: dict[str, type[graphene.Enum]] = {}
 
     def get_or_build_enum(
-        self, name: str, factory: Callable[[str], Type[graphene.Enum]]
-    ) -> Type[graphene.Enum]:
+        self, name: str, factory: Callable[[str], type[graphene.Enum]]
+    ) -> type[graphene.Enum]:
         enum_type = self._enums.get(name)
         if enum_type is None:
             enum_type = factory(name)

@@ -1,6 +1,6 @@
 import enum
 from functools import singledispatch
-from typing import List, Optional, Type, cast
+from typing import Optional, cast
 
 import graphene
 from graphene import JSONString
@@ -40,7 +40,7 @@ def build_field(column: ColumnClause) -> graphene.Field:
 
 
 @singledispatch
-def convert_from_db_type(db_type: TypeEngine, column: ColumnClause) -> Type[UnmountedType]:
+def convert_from_db_type(db_type: TypeEngine, column: ColumnClause) -> type[UnmountedType]:
     python_type = None
     try:
         python_type = db_type.python_type
@@ -58,19 +58,19 @@ def convert_from_db_type(db_type: TypeEngine, column: ColumnClause) -> Type[Unmo
 
 
 @convert_from_db_type.register
-def _(db_type: Enum, column: ColumnClause) -> Type[UnmountedType]:
-    enum_class: Optional[Type[Enum]] = db_type.enum_class  # type: ignore[attr-defined]
+def _(db_type: Enum, column: ColumnClause) -> type[UnmountedType]:
+    enum_class: Optional[type[Enum]] = db_type.enum_class  # type: ignore[attr-defined]
     if enum_class is not None:
         return registry.current().get_or_build_enum(
             enum_class.__name__, lambda name: graphene.Enum.from_enum(enum_class)
         )
     else:
         # TODO: allow names override?
-        enums: List[str] = db_type.enums  # type: ignore[attr-defined]
+        enums: list[str] = db_type.enums  # type: ignore[attr-defined]
         return registry.current().get_or_build_enum(
             column.name,
             lambda name: cast(
-                Type[graphene.Enum],
+                type[graphene.Enum],
                 graphene.Enum(name, [(entry, entry) for entry in enums]),
             ),
         )
@@ -79,7 +79,7 @@ def _(db_type: Enum, column: ColumnClause) -> Type[UnmountedType]:
 if _HAS_SQLALCHEMY_UTILS:
 
     @convert_from_db_type.register
-    def _(db_type: sqlalchemy_utils.ChoiceType, column: ColumnClause) -> Type[UnmountedType]:
+    def _(db_type: sqlalchemy_utils.ChoiceType, column: ColumnClause) -> type[UnmountedType]:
         choices = db_type.choices
         if isinstance(choices, type) and issubclass(choices, enum.Enum):
             return registry.current().get_or_build_enum(
@@ -88,11 +88,11 @@ if _HAS_SQLALCHEMY_UTILS:
         else:
             # TODO: allow names override?
             return registry.current().get_or_build_enum(
-                column.name, lambda name: cast(Type[graphene.Enum], graphene.Enum(name, choices))
+                column.name, lambda name: cast(type[graphene.Enum], graphene.Enum(name, choices))
             )
 
     @convert_from_db_type.register
-    def _(db_type: sqlalchemy_utils.JSONType, column: ColumnClause) -> Type[UnmountedType]:
+    def _(db_type: sqlalchemy_utils.JSONType, column: ColumnClause) -> type[UnmountedType]:
         # Alternative would be to use GenericScalar which is effectively
         # any type
         return JSONString

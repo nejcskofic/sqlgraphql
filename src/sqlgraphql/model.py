@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 from graphene import Field
 from graphene.types.objecttype import ObjectType, ObjectTypeOptions
@@ -18,8 +18,8 @@ class QueryableObjectType(ObjectType):
     @classmethod
     def __init_subclass_with_meta__(  # type: ignore[override]
         cls,
-        interfaces: Tuple[Any, ...] = (),
-        possible_types: Tuple[Any, ...] = (),
+        interfaces: tuple[Any, ...] = (),
+        possible_types: tuple[Any, ...] = (),
         default_resolver: Optional[Any] = None,
         base_query: Optional[sql.Select] = None,
         _meta: Optional[QueryableTypeOptions] = None,
@@ -39,7 +39,7 @@ class QueryableObjectType(ObjectType):
         base_query = base_query.with_only_columns(base_query.selected_columns.values())
         columns: sql.ColumnCollection = base_query.selected_columns
         column: elements.ColumnClause
-        fields: Dict[str, Field] = {}
+        fields: dict[str, Field] = {}
         for name, column in columns.items():
             if name in fields:
                 raise ValueError(f"Duplicate field with name '{name}' detected")
