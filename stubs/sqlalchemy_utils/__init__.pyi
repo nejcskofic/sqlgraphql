@@ -1,6 +1,6 @@
 import enum
 from collections.abc import Sequence
-from typing import Any, ClassVar
+from typing import Any
 
 from sqlalchemy import types
 from sqlalchemy.engine import Dialect
@@ -8,7 +8,6 @@ from sqlalchemy.sql.type_api import TypeEngine
 
 class ChoiceType(types.TypeDecorator):
     impl: TypeEngine = ...
-    cache_ok: ClassVar[bool] = ...
     choices: type[enum.Enum] | tuple[tuple[str, Any], ...]
     type_impl: object
     def __init__(
@@ -21,7 +20,6 @@ class ChoiceType(types.TypeDecorator):
 
 class JSONType(types.TypeDecorator):
     impl: TypeEngine = ...
-    cache_ok: ClassVar[bool] = ...
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     def process_bind_param(self, value: Any, dialect: Dialect) -> Any: ...
     def process_result_value(self, value: Any, dialect: Dialect) -> Any: ...

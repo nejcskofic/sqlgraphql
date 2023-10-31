@@ -1,61 +1,42 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import NamedTuple, Sequence
 
-from graphene import Field
-from graphene.types.objecttype import ObjectType, ObjectTypeOptions
-from sqlalchemy import sql
-from sqlalchemy.sql import elements
-
-from sqlgraphql.builders import build_field
+from sqlalchemy import Select, Column
+from sqlalchemy.sql.elements import KeyedColumnElement, ColumnElement
+from sqlalchemy.sql.type_api import TypeEngine
 
 
-class QueryableTypeOptions(ObjectTypeOptions):
-    base_query: sql.Select = None  # type: ignore[assignment]
+class SelectElement(NamedTuple):
+    # TODO: also expose primary key information for usage of ID as GQL type
+    name: str
+    type: TypeEngine  # At which point do we do transformation?
+    required: bool
 
 
-class QueryableObjectType(ObjectType):
-    _meta: QueryableTypeOptions
+@dataclass(frozen=True)
+class QueryableNode:
+    name: str
+    query: Select
+
+    def get_select_elements(self) -> Sequence[SelectElement]:
+        # nullability can be established only for Column
+        # for others just assume they are nullable
+        # TODO: cache?
+        return [
+            self._load_from_column_element(el)
+            for el in self.query.selected_columns
+        ]
 
     @classmethod
-    def __init_subclass_with_meta__(  # type: ignore[override]
-        cls,
-        interfaces: tuple[Any, ...] = (),
-        possible_types: tuple[Any, ...] = (),
-        default_resolver: Any | None = None,
-        base_query: sql.Select | None = None,
-        _meta: QueryableTypeOptions | None = None,
-        **options: Any,
-    ) -> None:
-        if _meta is None:
-            _meta = QueryableTypeOptions(cls)
-
-        if not isinstance(base_query, sql.Select):
-            raise ValueError("Expected 'base_query' of type 'sqlalchemy.sql.Select'")
-
-        # We transform query into one where we are not mapping to object but we get instead
-        # flat result. TODO: Test
-        # There is actually no need to do that since resolver will select only fields which are
-        # needed There is a bit of weirdness here: this will not keep textual columns (we probably
-        # don't care about this?)
-        base_query = base_query.with_only_columns(base_query.selected_columns.values())
-        columns: sql.ColumnCollection = base_query.selected_columns
-        column: elements.ColumnClause
-        fields: dict[str, Field] = {}
-        for name, column in columns.items():
-            if name in fields:
-                raise ValueError(f"Duplicate field with name '{name}' detected")
-
-            fields[name] = build_field(column)
-
-        _meta.base_query = base_query
-        if _meta.fields:
-            _meta.fields.update(fields)
+    def _load_from_column_element(cls, element: ColumnElement) -> SelectElement:
+        if isinstance(element, Column) and element.nullable is not None:
+            required = not element.nullable
         else:
-            _meta.fields = fields
+            # we don't have information, assume weaker constraint
+            required = False
 
-        super().__init_subclass_with_meta__(
-            interfaces=interfaces,
-            possible_types=possible_types,
-            default_resolver=default_resolver,
-            _meta=_meta,
-            **options,
+        return SelectElement(
+            name=element.name,
+            type=element.type,
+            required=required
         )

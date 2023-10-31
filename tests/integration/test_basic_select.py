@@ -1,51 +1,62 @@
-import graphene
 import pytest
+from graphql import GraphQLObjectType, GraphQLSchema
 from sqlalchemy import select
 
-from sqlgraphql.factories import ExecutionContext, QueryableList
-from sqlgraphql.model import QueryableObjectType
+from sqlgraphql.builders import build_list
+from sqlgraphql.model import QueryableNode
 from tests.integration.conftest import UserDB
 
 
-class User(QueryableObjectType):
-    class Meta:
-        base_query = select(UserDB)
-
-
-class ExplicitUser(QueryableObjectType):
-    class Meta:
-        base_query = select(UserDB.id, UserDB.name, UserDB.registration_date)
-
-
-class Query(graphene.ObjectType):
-    users = QueryableList(User)
-    explicit_users = QueryableList(ExplicitUser)
-
-
-SCHEMA = graphene.Schema(query=Query)
-
-
 class TestBasicSelect:
-    @pytest.mark.parametrize("node", ["users", "explicitUsers"])
-    def test_select_all(self, node, session_factory):
-        with session_factory.begin() as session:
-            result = SCHEMA.execute(
-                """
-                query {
-                    %s {
-                        id
-                        name
-                        registrationDate
-                    }
+    @pytest.fixture()
+    def schema(self):
+        implicit_user_node = QueryableNode("User", query=select(UserDB))
+        explicit_user_node = QueryableNode(
+            "ExplicitUser", query=select(UserDB.id, UserDB.name, UserDB.registration_date)
+        )
+        query_type = GraphQLObjectType(
+            "Query",
+            {
+                "implicitUsers": build_list(implicit_user_node),
+                "explicitUsers": build_list(explicit_user_node),
+            },
+        )
+        return GraphQLSchema(query_type)
+
+    def test_select_all_names(self, schema, executor):
+        result = executor(
+            schema,
+            """
+            query {
+                explicitUsers {
+                    name
                 }
-                """
-                % node,
-                context_value=ExecutionContext(session=session),
-            )
+            }
+            """,
+        )
         assert not result.errors
         assert result.data == {
-            node: [
-                dict(id="1", name="user1", registrationDate="2000-01-01"),
-                dict(id="2", name="user2", registrationDate="2000-01-02"),
+            "explicitUsers": [
+                dict(name="user1"),
+                dict(name="user2"),
+            ]
+        }
+
+    def test_casing_transformation(self, schema, executor):
+        result = executor(
+            schema,
+            """
+            query {
+                explicitUsers {
+                    registrationDate
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {
+            "explicitUsers": [
+                dict(registrationDate="2000-01-01"),
+                dict(registrationDate="2000-01-02"),
             ]
         }

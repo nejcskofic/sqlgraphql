@@ -4,6 +4,7 @@ import nox  # type:ignore[import-not-found]
 
 nox.options.default_venv_backend = "conda"
 os.environ.update({"PDM_IGNORE_SAVED_PYTHON": "1"})
+MIN_COVERAGE = 90
 
 
 @nox.session(python=["3.10", "3.11"])
@@ -23,7 +24,7 @@ def test(session: nox.Session) -> None:
         "-q",
         external=True,
     )
-    session.run("pytest", "--cov=sqlgraphql", "tests/")
+    session.run("pytest", "--cov=sqlgraphql", f"--cov-fail-under={MIN_COVERAGE}", "tests/")
 
 
 @nox.session(python="3.10")

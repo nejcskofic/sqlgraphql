@@ -6,8 +6,8 @@ authors = [
     {name = "Nejc Skofic",email = "nejc.skofic@gmail.com"},
 ]
 dependencies = [
-    "graphene==3.3",
-    "sqlalchemy==1.4.49",
+    "graphql-core>=3.2.0,<4.0.0",
+    "sqlalchemy>=2.0.0,<3.0.0",
 ]
 requires-python = ">=3.10,<4.0"
 readme = "README.md"
@@ -15,7 +15,7 @@ license = {text = "MIT"}
 
 [project.optional-dependencies]
 sqlalchemy-utils = [
-    "SQLAlchemy-Utils<1.0.0,>=0.38.2",
+    "SQLAlchemy-Utils<1.0.0,>=0.40.0",
 ]
 
 [build-system]
@@ -31,8 +31,6 @@ lint = [
     "black==23.10.1",
     "ruff==0.1.3",
     "mypy==1.6.1",
-    "graphene-stubs<1.0,>=0.15",
-    "sqlalchemy2-stubs<1.0.0.0,>=0.0.2-alpha.19",
 ]
 dev = [
     "pre-commit<3.0.0,>=2.15.0",
@@ -66,12 +64,11 @@ ignore = [
 
 [tool.mypy]
 files = ["."]
-exclude = ["tests"]
+exclude = ["tests/", "noxfile.py$"]
 mypy_path = [
     "$MYPY_CONFIG_FILE_DIR/src/",
     "$MYPY_CONFIG_FILE_DIR/stubs/"
 ]
-plugins = ["sqlalchemy.ext.mypy.plugin", "graphene_plugin"]
 warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_any_generics = false
@@ -85,3 +82,8 @@ ignore_errors = true
 module = "noxfile"
 ignore_errors = true
 follow_imports = "silent"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error",
+]

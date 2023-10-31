@@ -1,10 +1,11 @@
 import datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy import Column, Date, Integer, String, create_engine
+from graphql import ExecutionResult, GraphQLSchema, graphql_sync
+from sqlalchemy import String, create_engine
 from sqlalchemy.future import Engine
-from sqlalchemy.orm import DeclarativeMeta, Session, declarative_base, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 if TYPE_CHECKING:
 
@@ -19,15 +20,16 @@ else:
     SessionFactory = sessionmaker
 
 
-Base = cast(DeclarativeMeta, declarative_base())
+class Base(DeclarativeBase):
+    pass
 
 
 class UserDB(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(200), nullable=False)
-    registration_date = Column(Date, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    registration_date: Mapped[datetime.date]
 
 
 @pytest.fixture(scope="session")
@@ -52,3 +54,12 @@ def insert_data(session_factory):
                 UserDB(name="user2", registration_date=datetime.date(2000, 1, 2)),
             ]
         )
+
+
+@pytest.fixture()
+def executor(session_factory):
+    def executor(schema: GraphQLSchema, query: str) -> ExecutionResult:
+        with session_factory.begin() as session:
+            return graphql_sync(schema, query, context_value=dict(db_session=session))
+
+    return executor
