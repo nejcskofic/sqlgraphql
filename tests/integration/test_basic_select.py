@@ -1,5 +1,5 @@
 import pytest
-from graphql import GraphQLObjectType, GraphQLSchema
+from graphql import GraphQLObjectType, GraphQLSchema, print_schema
 from sqlalchemy import select
 
 from sqlgraphql.builders import build_list
@@ -19,7 +19,20 @@ class TestBasicSelectWithExplicitORMQuery:
         )
         return GraphQLSchema(query_type)
 
-    def test_select_all_names(self, schema, executor):
+    def test_gql_schema_is_as_expected(self, schema):
+        assert print_schema(schema) == (
+            "type Query {\n"
+            "  users: [User]\n"
+            "}\n"
+            "\n"
+            "type User {\n"
+            "  id: Int!\n"
+            "  name: String!\n"
+            "  registrationDate: String!\n"
+            "}"
+        )
+
+    def test_select_all_names(self, schema, executor, query_watcher):
         result = executor(
             schema,
             """
@@ -37,8 +50,11 @@ class TestBasicSelectWithExplicitORMQuery:
                 dict(name="user2"),
             ]
         }
+        assert query_watcher.executed_queries == [
+            "SELECT users.id, users.name, users.registration_date FROM users"
+        ]
 
-    def test_casing_transformation(self, schema, executor):
+    def test_casing_transformation(self, schema, executor, query_watcher):
         result = executor(
             schema,
             """
@@ -56,6 +72,9 @@ class TestBasicSelectWithExplicitORMQuery:
                 dict(registrationDate="2000-01-02"),
             ]
         }
+        assert query_watcher.executed_queries == [
+            "SELECT users.id, users.name, users.registration_date FROM users"
+        ]
 
 
 class TestSimpleSelectWithORMEntity:
@@ -68,7 +87,20 @@ class TestSimpleSelectWithORMEntity:
         )
         return GraphQLSchema(query_type)
 
-    def test_select_all_names_with_implicit_query(self, schema, executor):
+    def test_gql_schema_is_as_expected(self, schema):
+        assert print_schema(schema) == (
+            "type Query {\n"
+            "  users: [User]\n"
+            "}\n"
+            "\n"
+            "type User {\n"
+            "  id: Int!\n"
+            "  name: String!\n"
+            "  registrationDate: String!\n"
+            "}"
+        )
+
+    def test_select_all_names_with_implicit_query(self, schema, executor, query_watcher):
         result = executor(
             schema,
             """
@@ -86,6 +118,9 @@ class TestSimpleSelectWithORMEntity:
                 dict(name="user2"),
             ]
         }
+        assert query_watcher.executed_queries == [
+            "SELECT users.id, users.name, users.registration_date FROM users"
+        ]
 
 
 class TestSimpleSelectWithCoreQuery:
@@ -109,7 +144,7 @@ class TestSimpleSelectWithCoreQuery:
         )
         return GraphQLSchema(query_type)
 
-    def test_select_all_names_with_explicit_query(self, schema_explicit, executor):
+    def test_select_all_names_with_explicit_query(self, schema_explicit, executor, query_watcher):
         result = executor(
             schema_explicit,
             """
@@ -127,8 +162,9 @@ class TestSimpleSelectWithCoreQuery:
                 dict(name="user2"),
             ]
         }
+        assert query_watcher.executed_queries == ["SELECT users.id, users.name FROM users"]
 
-    def test_select_all_names_with_implicit_query(self, schema_implicit, executor):
+    def test_select_all_names_with_implicit_query(self, schema_implicit, executor, query_watcher):
         result = executor(
             schema_implicit,
             """
@@ -146,3 +182,6 @@ class TestSimpleSelectWithCoreQuery:
                 dict(name="user2"),
             ]
         }
+        assert query_watcher.executed_queries == [
+            "SELECT users.id, users.name, users.registration_date FROM users"
+        ]

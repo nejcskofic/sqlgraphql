@@ -1,9 +1,12 @@
 import datetime
-from typing import TYPE_CHECKING
+import re
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from graphql import ExecutionResult, GraphQLSchema, graphql_sync
-from sqlalchemy import String, create_engine
+from sqlalchemy import Connection, String, create_engine, event
+from sqlalchemy.engine.interfaces import DBAPICursor, ExecutionContext
 from sqlalchemy.future import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -67,3 +70,32 @@ def executor(session_factory):
             )
 
     return executor
+
+
+@pytest.fixture()
+def query_watcher(database_engine):
+    watcher = _QueryWatcher()
+    event.listen(database_engine, "before_cursor_execute", watcher.on_before_cursor_execute)
+    yield watcher
+    event.remove(database_engine, "before_cursor_execute", watcher.on_before_cursor_execute)
+
+
+class _QueryWatcher:
+    def __init__(self):
+        self._executed_queries = []
+
+    @property
+    def executed_queries(self) -> Sequence[str]:
+        return self._executed_queries
+
+    def on_before_cursor_execute(
+        self,
+        conn: Connection,
+        cursor: DBAPICursor,
+        statement: str,
+        parameters: Any,
+        context: ExecutionContext | None,
+        executemany: bool,
+    ):
+        statement = re.sub(r"\s+", " ", statement)
+        self._executed_queries.append(statement)

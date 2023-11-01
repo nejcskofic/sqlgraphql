@@ -42,11 +42,16 @@ def build_list(node: QueryableNode) -> GraphQLField:
         },
     )
 
-    def resolver(parent: object, info: GraphQLResolveInfo) -> Iterable:
-        context: TypedResolveContext = info.context
-        return context["db_session"].execute(node.query)
+    return GraphQLField(GraphQLList(object_type), resolve=_ListResolver(node))
 
-    return GraphQLField(GraphQLList(object_type), resolve=resolver)
+
+class _ListResolver:
+    def __init__(self, node: QueryableNode):
+        self._node = node
+
+    def __call__(self, parent: object | None, info: GraphQLResolveInfo) -> Iterable:
+        context: TypedResolveContext = info.context
+        return context["db_session"].execute(self._node.query)
 
 
 def _convert_to_gql_type(
