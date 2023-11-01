@@ -1,9 +1,18 @@
-from typing import Iterable, TypedDict
+from collections.abc import Iterable
+from typing import TypedDict
 
-from graphql import GraphQLField, GraphQLObjectType, GraphQLScalarType, GraphQLResolveInfo, GraphQLList, GraphQLInt, \
-    GraphQLNonNull, GraphQLString, GraphQLType
+from graphql import (
+    GraphQLField,
+    GraphQLInt,
+    GraphQLList,
+    GraphQLNonNull,
+    GraphQLObjectType,
+    GraphQLResolveInfo,
+    GraphQLScalarType,
+    GraphQLString,
+)
 from graphql.pyutils import snake_to_camel
-from sqlalchemy import Integer, String, Date, Row
+from sqlalchemy import Date, Integer, Row, String
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.type_api import TypeEngine
 
@@ -27,10 +36,10 @@ def build_list(node: QueryableNode) -> GraphQLField:
         {
             snake_to_camel(entry.name, upper=False): GraphQLField(
                 _convert_to_gql_type(entry.type, entry.required),
-                resolve=build_field_resolver(entry.name)
+                resolve=build_field_resolver(entry.name),
             )
             for entry in node.get_select_elements()
-        }
+        },
     )
 
     def resolver(parent: object, info: GraphQLResolveInfo) -> Iterable:
@@ -40,7 +49,9 @@ def build_list(node: QueryableNode) -> GraphQLField:
     return GraphQLField(GraphQLList(object_type), resolve=resolver)
 
 
-def _convert_to_gql_type(sql_type: TypeEngine, required: bool) -> GraphQLScalarType | GraphQLNonNull:
+def _convert_to_gql_type(
+    sql_type: TypeEngine, required: bool
+) -> GraphQLScalarType | GraphQLNonNull:
     # TODO: introduce abstraction
     sql_type_cls = type(sql_type)
     if sql_type_cls is Integer:

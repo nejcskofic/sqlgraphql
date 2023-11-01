@@ -7,6 +7,8 @@ from sqlalchemy import String, create_engine
 from sqlalchemy.future import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from sqlgraphql.builders import TypedResolveContext
+
 if TYPE_CHECKING:
 
     class SessionFactory(sessionmaker):
@@ -60,6 +62,8 @@ def insert_data(session_factory):
 def executor(session_factory):
     def executor(schema: GraphQLSchema, query: str) -> ExecutionResult:
         with session_factory.begin() as session:
-            return graphql_sync(schema, query, context_value=dict(db_session=session))
+            return graphql_sync(
+                schema, query, context_value=TypedResolveContext(db_session=session)
+            )
 
     return executor

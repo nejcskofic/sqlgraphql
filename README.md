@@ -1,8 +1,10 @@
 # sqlgraphql
 Library for generating SQL queries from GraphQL queries using graphene.
 
+## Done
+- Simple select using ORM queries (explicit columns or whole entity) or core queries
+
 ## Planned features
-- Query definition with implicit columns (e.g. `select(UserDB)`)
 - Transformation of all common sqlalchemy types to GQL type
   - Enum types
   - Ability to add your own transformations
