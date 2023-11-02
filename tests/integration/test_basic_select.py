@@ -1,8 +1,8 @@
 import pytest
-from graphql import GraphQLObjectType, GraphQLSchema, print_schema
+from graphql import print_schema
 from sqlalchemy import select
 
-from sqlgraphql.builders import build_list
+from sqlgraphql.builders import SchemaBuilder
 from sqlgraphql.model import QueryableNode
 from tests.integration.conftest import UserDB
 
@@ -13,11 +13,7 @@ class TestBasicSelectWithExplicitORMQuery:
         user_node = QueryableNode(
             "User", query=select(UserDB.id, UserDB.name, UserDB.registration_date)
         )
-        query_type = GraphQLObjectType(
-            "Query",
-            {"users": build_list(user_node)},
-        )
-        return GraphQLSchema(query_type)
+        return SchemaBuilder().add_root_list("users", user_node).build()
 
     def test_gql_schema_is_as_expected(self, schema):
         assert print_schema(schema) == (
@@ -81,11 +77,7 @@ class TestSimpleSelectWithORMEntity:
     @pytest.fixture()
     def schema(self):
         user_node = QueryableNode("User", query=select(UserDB))
-        query_type = GraphQLObjectType(
-            "Query",
-            {"users": build_list(user_node)},
-        )
-        return GraphQLSchema(query_type)
+        return SchemaBuilder().add_root_list("users", user_node).build()
 
     def test_gql_schema_is_as_expected(self, schema):
         assert print_schema(schema) == (
@@ -128,21 +120,13 @@ class TestSimpleSelectWithCoreQuery:
     def schema_explicit(self):
         table = UserDB.__table__
         user_node = QueryableNode("User", query=select(table.c.id, table.c.name))
-        query_type = GraphQLObjectType(
-            "Query",
-            {"users": build_list(user_node)},
-        )
-        return GraphQLSchema(query_type)
+        return SchemaBuilder().add_root_list("users", user_node).build()
 
     @pytest.fixture()
     def schema_implicit(self):
         table = UserDB.__table__
         user_node = QueryableNode("User", query=select(table))
-        query_type = GraphQLObjectType(
-            "Query",
-            {"users": build_list(user_node)},
-        )
-        return GraphQLSchema(query_type)
+        return SchemaBuilder().add_root_list("users", user_node).build()
 
     def test_select_all_names_with_explicit_query(self, schema_explicit, executor, query_watcher):
         result = executor(
