@@ -18,6 +18,7 @@ from graphql.pyutils import snake_to_camel
 from sqlalchemy import Column, ColumnElement, Date, Integer, Row, String
 from sqlalchemy.sql.type_api import TypeEngine
 
+from sqlgraphql._ast import get_child_field_names
 from sqlgraphql.model import QueryableNode
 from sqlgraphql.types import SimpleResolver, TypedResolveContext
 
@@ -26,17 +27,19 @@ def _snake_to_camel_case(value: str) -> str:
     return snake_to_camel(value, upper=False)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class _AnalyzedField:
-    field: ColumnElement
+    orm_name: str
+    gql_name: str
+    orm_field: ColumnElement
     required: bool
 
     @property
     def orm_type(self) -> TypeEngine:
-        return self.field.type
+        return self.orm_field.type
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class _AnalyzedNode:
     node: QueryableNode
     fields: Mapping[str, _AnalyzedField]
@@ -63,20 +66,19 @@ class SchemaBuilder:
 
             return resolver
 
-        field_name_converter = self._field_name_converter
         object_type = GraphQLObjectType(
             node.name,
             {
-                field_name_converter(name): GraphQLField(
+                entry.gql_name: GraphQLField(
                     self._convert_to_gql_type(entry.orm_type, entry.required),
-                    resolve=build_field_resolver(name),
+                    resolve=build_field_resolver(entry.orm_name),
                 )
-                for name, entry in analyzed_node.fields.items()
+                for entry in analyzed_node.fields.values()
             },
         )
 
         self._query_root_members[name] = GraphQLField(
-            GraphQLList(object_type), resolve=_ListResolver(node)
+            GraphQLList(object_type), resolve=_ListResolver(analyzed_node)
         )
         return self
 
@@ -93,6 +95,7 @@ class SchemaBuilder:
             return analyzed_node
 
         columns = node.query.selected_columns
+        field_name_converter = self._field_name_converter
         analyzed_fields = {}
         for column in columns:
             if isinstance(column, Column) and column.nullable is not None:
@@ -101,9 +104,14 @@ class SchemaBuilder:
                 # we don't have information, assume weaker constraint
                 required = False
 
-            analyzed_fields[column.name] = _AnalyzedField(column, required)
+            analyzed_fields[column.name] = _AnalyzedField(
+                orm_name=column.name,
+                gql_name=field_name_converter(column.name),
+                orm_field=column,
+                required=required,
+            )
 
-        analyzed_node = _AnalyzedNode(node, analyzed_fields)
+        analyzed_node = _AnalyzedNode(node=node, fields=analyzed_fields)
         self._analyzed_nodes[node] = analyzed_node
         return analyzed_node
 
@@ -127,9 +135,16 @@ class SchemaBuilder:
 
 
 class _ListResolver:
-    def __init__(self, node: QueryableNode):
+    def __init__(self, node: _AnalyzedNode):
         self._node = node
 
     def __call__(self, parent: object | None, info: GraphQLResolveInfo) -> Iterable:
         context: TypedResolveContext = info.context
-        return context["db_session"].execute(self._node.query)
+        assert len(info.field_nodes) == 1
+        children = get_child_field_names(info.field_nodes[0])
+        selected_fields = [
+            entry.orm_field for entry in self._node.fields.values() if entry.gql_name in children
+        ]
+        return context["db_session"].execute(
+            self._node.node.query.with_only_columns(*selected_fields)
+        )

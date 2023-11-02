@@ -46,9 +46,7 @@ class TestBasicSelectWithExplicitORMQuery:
                 dict(name="user2"),
             ]
         }
-        assert query_watcher.executed_queries == [
-            "SELECT users.id, users.name, users.registration_date FROM users"
-        ]
+        assert query_watcher.executed_queries == ["SELECT users.name FROM users"]
 
     def test_casing_transformation(self, schema, executor, query_watcher):
         result = executor(
@@ -56,6 +54,7 @@ class TestBasicSelectWithExplicitORMQuery:
             """
             query {
                 users {
+                    id
                     registrationDate
                 }
             }
@@ -64,12 +63,12 @@ class TestBasicSelectWithExplicitORMQuery:
         assert not result.errors
         assert result.data == {
             "users": [
-                dict(registrationDate="2000-01-01"),
-                dict(registrationDate="2000-01-02"),
+                dict(id=1, registrationDate="2000-01-01"),
+                dict(id=2, registrationDate="2000-01-02"),
             ]
         }
         assert query_watcher.executed_queries == [
-            "SELECT users.id, users.name, users.registration_date FROM users"
+            "SELECT users.id, users.registration_date FROM users"
         ]
 
 
@@ -110,9 +109,7 @@ class TestSimpleSelectWithORMEntity:
                 dict(name="user2"),
             ]
         }
-        assert query_watcher.executed_queries == [
-            "SELECT users.id, users.name, users.registration_date FROM users"
-        ]
+        assert query_watcher.executed_queries == ["SELECT users.name FROM users"]
 
 
 class TestSimpleSelectWithCoreQuery:
@@ -146,7 +143,7 @@ class TestSimpleSelectWithCoreQuery:
                 dict(name="user2"),
             ]
         }
-        assert query_watcher.executed_queries == ["SELECT users.id, users.name FROM users"]
+        assert query_watcher.executed_queries == ["SELECT users.name FROM users"]
 
     def test_select_all_names_with_implicit_query(self, schema_implicit, executor, query_watcher):
         result = executor(
@@ -166,6 +163,4 @@ class TestSimpleSelectWithCoreQuery:
                 dict(name="user2"),
             ]
         }
-        assert query_watcher.executed_queries == [
-            "SELECT users.id, users.name, users.registration_date FROM users"
-        ]
+        assert query_watcher.executed_queries == ["SELECT users.name FROM users"]
