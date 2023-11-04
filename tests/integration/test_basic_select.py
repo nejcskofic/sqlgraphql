@@ -164,3 +164,58 @@ class TestSimpleSelectWithCoreQuery:
             ]
         }
         assert query_watcher.executed_queries == ["SELECT users.name FROM users"]
+
+
+class TestFragmentsSupport:
+    @pytest.fixture()
+    def schema(self):
+        user_node = QueryableNode("User", query=select(UserDB))
+        return SchemaBuilder().add_root_list("users", user_node).build()
+
+    def test_query_with_fragments(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                users {
+                    ...userFields
+                }
+            }
+
+            fragment userFields on User {
+                id
+                name
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {
+            "users": [
+                dict(id=1, name="user1"),
+                dict(id=2, name="user2"),
+            ]
+        }
+        assert query_watcher.executed_queries == ["SELECT users.id, users.name FROM users"]
+
+    def test_query_with_inline_fragment(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                users {
+                    ... on User {
+                        id
+                        name
+                    }
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {
+            "users": [
+                dict(id=1, name="user1"),
+                dict(id=2, name="user2"),
+            ]
+        }
+        assert query_watcher.executed_queries == ["SELECT users.id, users.name FROM users"]

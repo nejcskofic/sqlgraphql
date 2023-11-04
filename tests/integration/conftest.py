@@ -10,7 +10,7 @@ from sqlalchemy.engine.interfaces import DBAPICursor, ExecutionContext
 from sqlalchemy.future import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from sqlgraphql.builders import TypedResolveContext
+from sqlgraphql.types import TypedResolveContext
 
 if TYPE_CHECKING:
 
