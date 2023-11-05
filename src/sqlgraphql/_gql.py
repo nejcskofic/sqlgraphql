@@ -1,11 +1,13 @@
 import datetime
 from collections.abc import Mapping
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 import graphql
 
 from sqlgraphql import gql_scalars
+from sqlgraphql.types import AnyJsonValue
 
 _DEFAULT_TYPE_MAP: Mapping[type, graphql.GraphQLScalarType] = {
     bool: graphql.GraphQLBoolean,
@@ -18,6 +20,7 @@ _DEFAULT_TYPE_MAP: Mapping[type, graphql.GraphQLScalarType] = {
     UUID: graphql.GraphQLID,
     bytes: gql_scalars.GraphQLBase64,
     Decimal: gql_scalars.GraphQLDecimal,
+    cast(type, AnyJsonValue): gql_scalars.GraphQLJson,
 }
 
 

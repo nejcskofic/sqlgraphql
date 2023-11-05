@@ -32,7 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.type_api import TypeEngine
-from sqlalchemy_utils import UUIDType
+from sqlalchemy_utils import JSONType, UUIDType
 
 from sqlgraphql.builders import SchemaBuilder
 from sqlgraphql.model import QueryableNode
@@ -76,7 +76,7 @@ TEST_CASES = [
     TestCase(UUIDType, UUID(int=1), "ID", "00000000-0000-0000-0000-000000000001"),
     # TestCase(ChoiceType([("A", 1), ("B", 2)]), "A", "A"),
     # TestCase(ChoiceType(DummyEnum, impl=Integer()), DummyEnum.THREE, "THREE"),
-    # TestCase(JSONType, {"m1": "a", "m2": 1}, '{"m1": "a", "m2": 1}'),
+    TestCase(JSONType, {"m1": "a", "m2": 1}, "Json", {"m1": "a", "m2": 1}),
 ]
 
 

@@ -230,8 +230,27 @@ def _parse_decimal_literal(value_node: ValueNode, _variables: Any = None) -> Dec
 
 GraphQLDecimal = GraphQLScalarType(
     name="Decimal",
-    description=("Scalar representing number for exact arithmetic"),
+    description="Scalar representing number for exact arithmetic",
     serialize=_serialize_decimal,
     parse_value=_coerce_decimal,
     parse_literal=_parse_decimal_literal,
+)
+
+
+def _serialize_json(output_value: Any) -> str:
+    # Can't do much here to test if this is validly encodable as json
+    # (without serializing and deserializing). Just return as is and fail
+    # in upper layers.
+    return output_value
+
+
+def _coerce_json(input_value: Any) -> Any:
+    return input_value
+
+
+GraphQLJson = GraphQLScalarType(
+    name="Json",
+    description="Scalar representing arbitrary json value",
+    serialize=_serialize_json,
+    parse_value=_coerce_json,
 )

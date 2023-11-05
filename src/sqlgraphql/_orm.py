@@ -1,14 +1,29 @@
 from collections.abc import Mapping
+from typing import cast
 
 from sqlalchemy.sql.type_api import TypeEngine
 
+from sqlgraphql.types import AnyJsonValue
+
+_DEFAULT_TYPE_MAP: dict[type[TypeEngine], type] = {}
+
+try:
+    import sqlalchemy_utils
+
+    _DEFAULT_TYPE_MAP[sqlalchemy_utils.JSONType] = cast(type, AnyJsonValue)
+except ImportError:
+    pass
+
 
 class TypeRegistry:
-    def __init__(self, explicit_mappings: Mapping[TypeEngine, type] | None = None):
-        self._mapping = explicit_mappings or {}
+    def __init__(self, explicit_mappings: Mapping[type[TypeEngine], type] | None = None):
+        mapping = dict(_DEFAULT_TYPE_MAP)
+        if explicit_mappings is not None:
+            mapping.update(explicit_mappings)
+        self._mapping = mapping
 
     def get_python_type(self, type_: TypeEngine) -> type:
-        python_type = self._mapping.get(type_)
+        python_type = self._mapping.get(type(type_))
         if python_type is not None:
             return python_type
 
