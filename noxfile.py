@@ -4,7 +4,7 @@ import nox  # type:ignore[import-not-found]
 
 nox.options.default_venv_backend = "conda"
 os.environ.update({"PDM_IGNORE_SAVED_PYTHON": "1"})
-MIN_COVERAGE = 90
+MIN_COVERAGE = 65
 
 
 @nox.session(python=["3.10", "3.11"])

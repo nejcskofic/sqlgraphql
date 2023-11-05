@@ -27,7 +27,7 @@ class TestBasicSelectWithExplicitORMQuery:
             "  registrationDate: Date!\n"
             "}\n"
             "\n"
-            '"""Date scalar type represents date in ISO format(YYYY-MM-DD)."""\n'
+            '"""Date scalar type represents date in ISO format (YYYY-MM-DD)."""\n'
             "scalar Date"
         )
 
@@ -93,7 +93,7 @@ class TestSimpleSelectWithORMEntity:
             "  registrationDate: Date!\n"
             "}\n"
             "\n"
-            '"""Date scalar type represents date in ISO format(YYYY-MM-DD)."""\n'
+            '"""Date scalar type represents date in ISO format (YYYY-MM-DD)."""\n'
             "scalar Date"
         )
 
