@@ -24,8 +24,11 @@ class TestBasicSelectWithExplicitORMQuery:
             "type User {\n"
             "  id: Int!\n"
             "  name: String!\n"
-            "  registrationDate: String!\n"
-            "}"
+            "  registrationDate: Date!\n"
+            "}\n"
+            "\n"
+            '"""Date scalar type represents date in ISO format(YYYY-MM-DD)."""\n'
+            "scalar Date"
         )
 
     def test_select_all_names(self, schema, executor, query_watcher):
@@ -87,8 +90,11 @@ class TestSimpleSelectWithORMEntity:
             "type User {\n"
             "  id: Int!\n"
             "  name: String!\n"
-            "  registrationDate: String!\n"
-            "}"
+            "  registrationDate: Date!\n"
+            "}\n"
+            "\n"
+            '"""Date scalar type represents date in ISO format(YYYY-MM-DD)."""\n'
+            "scalar Date"
         )
 
     def test_select_all_names_with_implicit_query(self, schema, executor, query_watcher):

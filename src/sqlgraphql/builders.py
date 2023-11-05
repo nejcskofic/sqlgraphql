@@ -4,20 +4,19 @@ from collections.abc import Callable
 
 from graphql import (
     GraphQLField,
-    GraphQLInt,
     GraphQLList,
     GraphQLNonNull,
     GraphQLObjectType,
     GraphQLResolveInfo,
     GraphQLScalarType,
     GraphQLSchema,
-    GraphQLString,
 )
 from graphql.pyutils import snake_to_camel
-from sqlalchemy import Column, Date, Integer, Row, String
-from sqlalchemy.sql.type_api import TypeEngine
+from sqlalchemy import Column, Row
 
 from sqlgraphql._ast import AnalyzedField, AnalyzedNode
+from sqlgraphql._gql import ScalarTypeRegistry
+from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import ListResolver
 from sqlgraphql.model import QueryableNode
 from sqlgraphql.types import SimpleResolver
@@ -35,6 +34,8 @@ class SchemaBuilder:
         # other fields
         self._analyzed_nodes: dict[QueryableNode, AnalyzedNode] = {}
         self._query_root_members: dict[str, GraphQLField] = {}
+        self._orm_type_registry = TypeRegistry()
+        self._gql_type_registry = ScalarTypeRegistry()
 
     def add_root_list(self, name: str, node: QueryableNode) -> SchemaBuilder:
         if name in self._query_root_members:
@@ -52,7 +53,7 @@ class SchemaBuilder:
             node.name,
             {
                 entry.gql_name: GraphQLField(
-                    self._convert_to_gql_type(entry.orm_type, entry.required),
+                    self._convert_to_gql_type(entry),
                     resolve=build_field_resolver(entry.orm_name),
                 )
                 for entry in analyzed_node.fields.values()
@@ -98,20 +99,6 @@ class SchemaBuilder:
         self._analyzed_nodes[node] = analyzed_node
         return analyzed_node
 
-    @classmethod
-    def _convert_to_gql_type(
-        cls, sql_type: TypeEngine, required: bool
-    ) -> GraphQLScalarType | GraphQLNonNull:
-        # TODO: introduce abstraction
-        sql_type_cls = type(sql_type)
-        if sql_type_cls is Integer:
-            gql_type = GraphQLInt
-        elif sql_type_cls in [String, Date]:
-            gql_type = GraphQLString
-        else:
-            raise NotImplementedError("Not yet implemented")
-
-        if required:
-            return GraphQLNonNull(gql_type)
-        else:
-            return gql_type
+    def _convert_to_gql_type(self, field: AnalyzedField) -> GraphQLScalarType | GraphQLNonNull:
+        python_type = self._orm_type_registry.get_python_type(field.orm_type)
+        return self._gql_type_registry.get_scalar_type(python_type, field.required)

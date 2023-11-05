@@ -6,6 +6,7 @@ Library for generating SQL queries from GraphQL queries using graphene.
 
 ## Planned features
 - Transformation of all common sqlalchemy types to GQL type
+  - ID type
   - Enum types
   - Ability to add your own transformations
 - Handling of primary keys (transformation into ID)
