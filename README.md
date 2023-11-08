@@ -7,10 +7,10 @@ Library for generating SQL queries from GraphQL queries using graphene.
 ## Planned features
 - Transformation of all common sqlalchemy types to GQL type
   - ID type
-  - Enum types
-  - Ability to add your own transformations
+  - Ability to add your own transformations (Enum registry is internal)
 - Handling of primary keys (transformation into ID)
   - Composite primary keys?
+- Support selection of single entry (by ID)
 - Filtering logic
   - Input object creation with oneof
   - Composite filters with and/or/not
@@ -20,3 +20,4 @@ Library for generating SQL queries from GraphQL queries using graphene.
   - Walking AST to create single query for (n..1 relation)
   - Batching or other queries (n..n relations)
   - Walking AST breath first instead of depth first?
+- Mixed mode definitions (DB query and other pure python side resolvers)

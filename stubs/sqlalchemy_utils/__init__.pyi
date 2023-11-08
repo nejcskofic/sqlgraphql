@@ -1,22 +1,11 @@
-import enum
-from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import types
 from sqlalchemy.engine import Dialect
 from sqlalchemy.sql.type_api import TypeEngine
+from sqlalchemy_utils.types.choice import ChoiceType
 
-class ChoiceType(types.TypeDecorator):
-    impl: TypeEngine = ...
-    choices: type[enum.Enum] | tuple[tuple[str, Any], ...]
-    type_impl: object
-    def __init__(
-        self, choices: type[enum.Enum] | Sequence[tuple[str, Any]], impl: TypeEngine | None = ...
-    ) -> None: ...
-    @property
-    def python_type(self) -> type: ...
-    def process_bind_param(self, value: Any, dialect: Dialect) -> Any: ...
-    def process_result_value(self, value: Any, dialect: Dialect) -> Any: ...
+__all__ = ["ChoiceType", "JSONType"]
 
 class JSONType(types.TypeDecorator):
     impl: TypeEngine = ...

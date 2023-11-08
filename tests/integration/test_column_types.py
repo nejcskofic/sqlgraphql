@@ -32,7 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.type_api import TypeEngine
-from sqlalchemy_utils import JSONType, UUIDType
+from sqlalchemy_utils import ChoiceType, JSONType, UUIDType
 
 from sqlgraphql.builders import SchemaBuilder
 from sqlgraphql.model import QueryableNode
@@ -52,6 +52,7 @@ class TestCase:
     value: Any
     gql_type: str
     gql_value: Any
+    enum_schema: str | None = None
 
 
 TEST_CASES = [
@@ -59,8 +60,14 @@ TEST_CASES = [
     TestCase(Boolean, True, "Boolean", True),
     TestCase(Date, date(2020, 1, 2), "Date", "2020-01-02"),
     TestCase(DateTime, datetime(2020, 1, 2, 3, 4, 5), "DateTime", "2020-01-02T03:04:05"),
-    # TestCase(Enum(DummyEnum), DummyEnum.TWO, "TWO"),
-    TestCase(Enum("A", "B"), "A", "String", "A"),
+    TestCase(
+        Enum(DummyEnum),
+        DummyEnum.TWO,
+        "DummyEnum",
+        "TWO",
+        "enum DummyEnum {\n  ONE\n  TWO\n  THREE\n}",
+    ),
+    TestCase(Enum("A", "B"), "A", "Member", "A", "enum Member {\n  A\n  B\n}"),
     TestCase(Float, 1.1, "Float", 1.1),
     TestCase(Integer, 1, "Int", 1),
     TestCase(LargeBinary, b"1234", "Base64", "MTIzNA=="),
@@ -74,8 +81,14 @@ TEST_CASES = [
     TestCase(Uuid, UUID(int=1), "ID", "00000000-0000-0000-0000-000000000001"),
     # sqlalchemy utils types
     TestCase(UUIDType, UUID(int=1), "ID", "00000000-0000-0000-0000-000000000001"),
-    # TestCase(ChoiceType([("A", 1), ("B", 2)]), "A", "A"),
-    # TestCase(ChoiceType(DummyEnum, impl=Integer()), DummyEnum.THREE, "THREE"),
+    TestCase(ChoiceType([("A", 1), ("B", 2)]), "A", "Member", "A", "enum Member {\n  A\n  B\n}"),
+    TestCase(
+        ChoiceType(DummyEnum, impl=Integer()),
+        DummyEnum.THREE,
+        "DummyEnum",
+        "THREE",
+        "enum DummyEnum {\n  ONE\n  TWO\n  THREE\n}",
+    ),
     TestCase(JSONType, {"m1": "a", "m2": 1}, "Json", {"m1": "a", "m2": 1}),
 ]
 
@@ -127,3 +140,5 @@ class TestSupportedColumnTypes:
             print_type(schema.type_map["Dummy"])
             == f"type Dummy {{\n  member: {test_case.gql_type}\n}}"
         )
+        if test_case.enum_schema is not None:
+            assert print_type(schema.type_map[test_case.gql_type]) == test_case.enum_schema
