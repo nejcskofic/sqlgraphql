@@ -10,20 +10,18 @@ from graphql import (
     GraphQLList,
     GraphQLNonNull,
     GraphQLObjectType,
-    GraphQLResolveInfo,
     GraphQLScalarType,
     GraphQLSchema,
 )
 from graphql.pyutils import snake_to_camel
-from sqlalchemy import Column, Enum, Row
+from sqlalchemy import Column, Enum
 from sqlalchemy.sql.type_api import TypeEngine
 
 from sqlgraphql._ast import AnalyzedField, AnalyzedNode
 from sqlgraphql._gql import ScalarTypeRegistry
 from sqlgraphql._orm import TypeRegistry
-from sqlgraphql._resolvers import ListResolver
+from sqlgraphql._resolvers import DbFieldResolver, ListResolver
 from sqlgraphql.model import QueryableNode
-from sqlgraphql.types import SimpleResolver
 
 
 def _snake_to_camel_case(value: str) -> str:
@@ -48,18 +46,12 @@ class SchemaBuilder:
 
         analyzed_node = self._get_analyzed_node(node)
 
-        def build_field_resolver(name: str) -> SimpleResolver:
-            def resolver(parent: Row, info: GraphQLResolveInfo) -> object | None:
-                return parent._mapping.get(name)
-
-            return resolver
-
         object_type = GraphQLObjectType(
             node.name,
             {
                 entry.gql_name: GraphQLField(
                     self._convert_to_gql_type(entry),
-                    resolve=build_field_resolver(entry.orm_name),
+                    resolve=DbFieldResolver(entry.orm_name),
                 )
                 for entry in analyzed_node.fields.values()
             },

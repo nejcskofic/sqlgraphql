@@ -6,7 +6,7 @@ from uuid import UUID
 
 import graphql
 
-from sqlgraphql import gql_scalars
+from sqlgraphql.gql import scalars
 from sqlgraphql.types import AnyJsonValue
 
 _DEFAULT_TYPE_MAP: Mapping[type, graphql.GraphQLScalarType] = {
@@ -14,13 +14,13 @@ _DEFAULT_TYPE_MAP: Mapping[type, graphql.GraphQLScalarType] = {
     float: graphql.GraphQLFloat,
     int: graphql.GraphQLInt,
     str: graphql.GraphQLString,
-    datetime.date: gql_scalars.GraphQLDate,
-    datetime.datetime: gql_scalars.GraphQLDateTime,
-    datetime.time: gql_scalars.GraphQLTime,
+    datetime.date: scalars.GraphQLDate,
+    datetime.datetime: scalars.GraphQLDateTime,
+    datetime.time: scalars.GraphQLTime,
     UUID: graphql.GraphQLID,
-    bytes: gql_scalars.GraphQLBase64,
-    Decimal: gql_scalars.GraphQLDecimal,
-    cast(type, AnyJsonValue): gql_scalars.GraphQLJson,
+    bytes: scalars.GraphQLBase64,
+    Decimal: scalars.GraphQLDecimal,
+    cast(type, AnyJsonValue): scalars.GraphQLJson,
 }
 
 
