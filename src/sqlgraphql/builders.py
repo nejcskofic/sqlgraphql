@@ -5,8 +5,11 @@ from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from graphql import (
+    GraphQLArgument,
     GraphQLEnumType,
     GraphQLField,
+    GraphQLInputField,
+    GraphQLInputObjectType,
     GraphQLList,
     GraphQLNonNull,
     GraphQLObjectType,
@@ -17,10 +20,10 @@ from graphql.pyutils import snake_to_camel
 from sqlalchemy import Column, Enum
 from sqlalchemy.sql.type_api import TypeEngine
 
-from sqlgraphql._ast import AnalyzedField, AnalyzedNode
+from sqlgraphql._ast import AnalyzedField, AnalyzedNode, SortDirection
 from sqlgraphql._gql import ScalarTypeRegistry
 from sqlgraphql._orm import TypeRegistry
-from sqlgraphql._resolvers import DbFieldResolver, ListResolver
+from sqlgraphql._resolvers import DbFieldResolver, ListResolver, SortableListResolver
 from sqlgraphql.model import QueryableNode
 
 
@@ -39,8 +42,11 @@ class SchemaBuilder:
         self._orm_type_registry = TypeRegistry()
         self._gql_type_registry = ScalarTypeRegistry()
         self._enum_builder = _EnumBuilder()
+        self._sortable_builder = _SortableArgumentBuilder()
 
-    def add_root_list(self, name: str, node: QueryableNode) -> SchemaBuilder:
+    def add_root_list(
+        self, name: str, node: QueryableNode, *, sortable: bool = False
+    ) -> SchemaBuilder:
         if name in self._query_root_members:
             raise ValueError(f"Name '{name}' has already been used")
 
@@ -57,8 +63,18 @@ class SchemaBuilder:
             },
         )
 
+        args = {}
+        resolve_cls: type[ListResolver] | type[SortableListResolver]
+        if sortable:
+            args["sort"] = GraphQLArgument(
+                GraphQLList(self._sortable_builder.build_from_node(analyzed_node))
+            )
+            resolve_cls = SortableListResolver
+        else:
+            resolve_cls = ListResolver
+
         self._query_root_members[name] = GraphQLField(
-            GraphQLList(object_type), resolve=ListResolver(analyzed_node)
+            GraphQLList(object_type), args=args, resolve=resolve_cls(analyzed_node)
         )
         return self
 
@@ -179,3 +195,24 @@ class _EnumBuilder:
             pass
 
         return mapping
+
+
+class _SortableArgumentBuilder:
+    def __init__(self) -> None:
+        self._sort_direction_gql_enum = GraphQLEnumType(
+            "SortDirection", {key: value for key, value in SortDirection.__members__.items()}
+        )
+        self._cache: dict[QueryableNode, GraphQLInputObjectType] = {}
+
+    def build_from_node(self, node: AnalyzedNode) -> GraphQLInputObjectType:
+        gql_type = self._cache.get(node.node)
+        if gql_type is None:
+            gql_type = GraphQLInputObjectType(
+                node.node.name + "SortArguments",
+                {
+                    field.gql_name: GraphQLInputField(self._sort_direction_gql_enum)
+                    for field in node.fields.values()
+                },
+            )
+            self._cache[node.node] = gql_type
+        return gql_type
