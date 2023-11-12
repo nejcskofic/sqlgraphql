@@ -18,7 +18,7 @@ class TestSortableLists:
     def test_gql_schema_is_as_expected(self, schema):
         assert print_schema(schema) == (
             "type Query {\n"
-            "  users(sort: [UserSortArguments]): [User]\n"
+            "  users(sort: [UserSortInputObject]): [User]\n"
             "}\n"
             "\n"
             "type User {\n"
@@ -30,15 +30,15 @@ class TestSortableLists:
             '"""Date scalar type represents date in ISO format (YYYY-MM-DD)."""\n'
             "scalar Date\n"
             "\n"
-            "input UserSortArguments {\n"
+            "input UserSortInputObject {\n"
             "  id: SortDirection\n"
             "  name: SortDirection\n"
             "  registrationDate: SortDirection\n"
             "}\n"
             "\n"
             "enum SortDirection {\n"
-            "  ASC\n"
-            "  DESC\n"
+            "  asc\n"
+            "  desc\n"
             "}"
         )
 
@@ -65,15 +65,15 @@ class TestSortableLists:
     @pytest.mark.parametrize(
         ["sort_arg", "expected_data", "order_by_sql_part"],
         [
-            ("{name: DESC}", [dict(name="user2"), dict(name="user1")], "ORDER BY users.name DESC"),
-            ("{name: ASC}", [dict(name="user1"), dict(name="user2")], "ORDER BY users.name ASC"),
+            ("{name: desc}", [dict(name="user2"), dict(name="user1")], "ORDER BY users.name DESC"),
+            ("{name: asc}", [dict(name="user1"), dict(name="user2")], "ORDER BY users.name ASC"),
             (
-                "{registrationDate: DESC}",
+                "{registrationDate: desc}",
                 [dict(name="user2"), dict(name="user1")],
                 "ORDER BY users.registration_date DESC",
             ),
             (
-                "{registrationDate: ASC}",
+                "{registrationDate: asc}",
                 [dict(name="user1"), dict(name="user2")],
                 "ORDER BY users.registration_date ASC",
             ),
@@ -104,7 +104,7 @@ class TestSortableLists:
             schema,
             """
             query {
-                users (sort: [{name: ASC}, {id: DESC}]) {
+                users (sort: [{name: asc}, {id: desc}]) {
                     name
                 }
             }

@@ -30,10 +30,16 @@ class AnalyzedField:
         return self.orm_field.type
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True, kw_only=True, eq=False)
 class AnalyzedNode:
     node: QueryableNode
     fields: Mapping[str, AnalyzedField]
+
+    def __hash__(self) -> int:
+        return hash(id(self))
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
 
 
 class _TransformQueryVisitor(Visitor):

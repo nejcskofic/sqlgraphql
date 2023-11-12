@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 from collections.abc import Callable, Mapping
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeVar
 
 from graphql import (
     GraphQLArgument,
@@ -11,6 +11,7 @@ from graphql import (
     GraphQLInputField,
     GraphQLInputObjectType,
     GraphQLList,
+    GraphQLNamedType,
     GraphQLNonNull,
     GraphQLObjectType,
     GraphQLScalarType,
@@ -24,6 +25,7 @@ from sqlgraphql._ast import AnalyzedField, AnalyzedNode, SortDirection
 from sqlgraphql._gql import ScalarTypeRegistry
 from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import DbFieldResolver, ListResolver, SortableListResolver
+from sqlgraphql._utils import CacheDict
 from sqlgraphql.model import QueryableNode
 
 
@@ -39,10 +41,11 @@ class SchemaBuilder:
         # other fields
         self._analyzed_nodes: dict[QueryableNode, AnalyzedNode] = {}
         self._query_root_members: dict[str, GraphQLField] = {}
+        self._type_map = _TypeMap()
         self._orm_type_registry = TypeRegistry()
         self._gql_type_registry = ScalarTypeRegistry()
-        self._enum_builder = _EnumBuilder()
-        self._sortable_builder = _SortableArgumentBuilder()
+        self._enum_builder = _EnumBuilder(self._type_map)
+        self._sortable_builder = _SortableArgumentBuilder(self._type_map)
 
     def add_root_list(
         self, name: str, node: QueryableNode, *, sortable: bool = False
@@ -122,6 +125,35 @@ class SchemaBuilder:
         return self._gql_type_registry.get_scalar_type(python_type, field.required)
 
 
+_TGraphQLNamedType = TypeVar("_TGraphQLNamedType", bound=GraphQLNamedType)
+
+
+class _TypeMap:
+    __slots__ = ("_map",)
+
+    def __init__(self) -> None:
+        self._map: dict[str, GraphQLNamedType] = {}
+
+    def add(self, gql_type: _TGraphQLNamedType) -> _TGraphQLNamedType:
+        name = gql_type.name
+        if name in self._map:
+            raise ValueError(f"Name '{name}' has already been registered.")
+        self._map[name] = gql_type
+        return gql_type
+
+    def get_unique_name(self, name: str, suffix: str = "") -> str:
+        unique_name = name + suffix
+        if unique_name not in self._map:
+            return unique_name
+
+        idx = 1
+        while True:
+            unique_name = f"{name}{idx}{suffix}"
+            if unique_name not in self._map:
+                return unique_name
+            idx += 1
+
+
 class _EnumType(NamedTuple):
     value: type[enum.Enum]
 
@@ -134,10 +166,13 @@ _AnalyzedEnum = _EnumType | _ExplicitMappings
 
 
 class _EnumBuilder:
+    _TYPE_SUFFIX = "Enum"
+
     # TODO: Rework builder. Add ability to register custom handlers, support subclassing types
-    def __init__(self) -> None:
+    def __init__(self, type_map: _TypeMap) -> None:
+        self._type_map = type_map
         self._type_handlers = self._build_default_handlers()
-        self._cache: dict[type[enum.Enum], GraphQLEnumType] = {}
+        self._cache = CacheDict[type[enum.Enum], GraphQLEnumType](self._construct_gql_enum)
 
     def build_from_field(
         self, field: AnalyzedField
@@ -149,19 +184,12 @@ class _EnumBuilder:
         analyzed_enum = handler(field.orm_type)
         match analyzed_enum:
             case _EnumType(enum_cls):
-                gql_type = self._cache.get(enum_cls)
-                if gql_type is None:
-                    # Library will either use enum values or enum keys. It will not work with actual
-                    # enum object.
-                    # https://github.com/graphql-python/graphql-core/issues/73
-                    gql_type = GraphQLEnumType(
-                        enum_cls.__name__,
-                        {key: value for key, value in enum_cls.__members__.items()},
-                    )
-                    self._cache[enum_cls] = gql_type
-            case _ExplicitMappings(value):
+                gql_type = self._cache[enum_cls]
+            case _ExplicitMappings(values):
                 # We don't cache implicit enums
-                gql_type = GraphQLEnumType(snake_to_camel(field.orm_name), value)
+                gql_type = self._construct_gql_enum_using_dict(
+                    snake_to_camel(field.orm_name), values
+                )
             case _:
                 assert False, "Should not happen"
 
@@ -169,6 +197,25 @@ class _EnumBuilder:
             return GraphQLNonNull(gql_type)
         else:
             return gql_type
+
+    def _construct_gql_enum(self, enum_cls: type[enum.Enum]) -> GraphQLEnumType:
+        # Library will either use enum values or enum keys. It will not work with actual
+        # enum object.
+        # https://github.com/graphql-python/graphql-core/issues/73
+        return self._type_map.add(
+            GraphQLEnumType(
+                self._type_map.get_unique_name(enum_cls.__name__, self._TYPE_SUFFIX),
+                {key: value for key, value in enum_cls.__members__.items()},
+            )
+        )
+
+    def _construct_gql_enum_using_dict(
+        self, name: str, values: Mapping[str, Any]
+    ) -> GraphQLEnumType:
+        # We don't cache implicit enums
+        return self._type_map.add(
+            GraphQLEnumType(self._type_map.get_unique_name(name, self._TYPE_SUFFIX), values)
+        )
 
     @classmethod
     def _build_default_handlers(cls) -> Mapping[type[TypeEngine], Callable[[Any], _AnalyzedEnum]]:
@@ -198,21 +245,30 @@ class _EnumBuilder:
 
 
 class _SortableArgumentBuilder:
-    def __init__(self) -> None:
-        self._sort_direction_gql_enum = GraphQLEnumType(
-            "SortDirection", {key: value for key, value in SortDirection.__members__.items()}
+    _TYPE_SUFFIX = "SortInputObject"
+
+    def __init__(self, type_map: _TypeMap) -> None:
+        self._type_map = type_map
+        self._sort_direction_gql_enum = type_map.add(
+            GraphQLEnumType(
+                "SortDirection",
+                {key.lower(): value for key, value in SortDirection.__members__.items()},
+            )
         )
-        self._cache: dict[QueryableNode, GraphQLInputObjectType] = {}
+        self._cache = CacheDict[AnalyzedNode, GraphQLInputObjectType](
+            self._construct_sort_argument_type
+        )
 
     def build_from_node(self, node: AnalyzedNode) -> GraphQLInputObjectType:
-        gql_type = self._cache.get(node.node)
-        if gql_type is None:
-            gql_type = GraphQLInputObjectType(
-                node.node.name + "SortArguments",
+        return self._cache[node]
+
+    def _construct_sort_argument_type(self, node: AnalyzedNode) -> GraphQLInputObjectType:
+        return self._type_map.add(
+            GraphQLInputObjectType(
+                self._type_map.get_unique_name(node.node.name, self._TYPE_SUFFIX),
                 {
                     field.gql_name: GraphQLInputField(self._sort_direction_gql_enum)
                     for field in node.fields.values()
                 },
             )
-            self._cache[node.node] = gql_type
-        return gql_type
+        )

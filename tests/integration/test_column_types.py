@@ -63,11 +63,11 @@ TEST_CASES = [
     TestCase(
         Enum(DummyEnum),
         DummyEnum.TWO,
-        "DummyEnum",
+        "DummyEnumEnum",
         "TWO",
-        "enum DummyEnum {\n  ONE\n  TWO\n  THREE\n}",
+        "enum DummyEnumEnum {\n  ONE\n  TWO\n  THREE\n}",
     ),
-    TestCase(Enum("A", "B"), "A", "Member", "A", "enum Member {\n  A\n  B\n}"),
+    TestCase(Enum("A", "B"), "A", "MemberEnum", "A", "enum MemberEnum {\n  A\n  B\n}"),
     TestCase(Float, 1.1, "Float", 1.1),
     TestCase(Integer, 1, "Int", 1),
     TestCase(LargeBinary, b"1234", "Base64", "MTIzNA=="),
@@ -81,13 +81,15 @@ TEST_CASES = [
     TestCase(Uuid, UUID(int=1), "ID", "00000000-0000-0000-0000-000000000001"),
     # sqlalchemy utils types
     TestCase(UUIDType, UUID(int=1), "ID", "00000000-0000-0000-0000-000000000001"),
-    TestCase(ChoiceType([("A", 1), ("B", 2)]), "A", "Member", "A", "enum Member {\n  A\n  B\n}"),
+    TestCase(
+        ChoiceType([("A", 1), ("B", 2)]), "A", "MemberEnum", "A", "enum MemberEnum {\n  A\n  B\n}"
+    ),
     TestCase(
         ChoiceType(DummyEnum, impl=Integer()),
         DummyEnum.THREE,
-        "DummyEnum",
+        "DummyEnumEnum",
         "THREE",
-        "enum DummyEnum {\n  ONE\n  TWO\n  THREE\n}",
+        "enum DummyEnumEnum {\n  ONE\n  TWO\n  THREE\n}",
     ),
     TestCase(JSONType, {"m1": "a", "m2": 1}, "Json", {"m1": "a", "m2": 1}),
 ]
