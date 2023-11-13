@@ -24,26 +24,6 @@ _DEFAULT_TYPE_MAP: Mapping[type, graphql.GraphQLScalarType] = {
 }
 
 
-class ScalarTypeRegistry:
-    def __init__(self, type_map_overrides: Mapping[type, graphql.GraphQLScalarType] | None = None):
-        mapping = dict(_DEFAULT_TYPE_MAP)
-        if type_map_overrides:
-            mapping.update(type_map_overrides)
-        self._mapping = mapping
-
-    def get_scalar_type(
-        self, python_type: type, required: bool
-    ) -> graphql.GraphQLScalarType | graphql.GraphQLNonNull:
-        gql_type = self._mapping.get(python_type)
-        if gql_type is None:
-            raise ValueError(f"Type '{python_type!r}' does not have GQL scalar equivalent")
-
-        if required:
-            return graphql.GraphQLNonNull(gql_type)
-        else:
-            return gql_type
-
-
 TGraphQLNamedType = TypeVar("TGraphQLNamedType", bound=graphql.GraphQLNamedType)
 
 
@@ -71,3 +51,30 @@ class TypeMap:
             if unique_name not in self._map:
                 return unique_name
             idx += 1
+
+
+class ScalarTypeRegistry:
+    def __init__(
+        self,
+        type_map: TypeMap,
+        type_map_overrides: Mapping[type, graphql.GraphQLScalarType] | None = None,
+    ):
+        mapping = dict(_DEFAULT_TYPE_MAP)
+        if type_map_overrides:
+            mapping.update(type_map_overrides)
+        for entry in set(mapping.values()):
+            type_map.add(entry)
+        self._type_map = type_map
+        self._mapping = mapping
+
+    def get_scalar_type(
+        self, python_type: type, required: bool
+    ) -> graphql.GraphQLScalarType | graphql.GraphQLNonNull:
+        gql_type = self._mapping.get(python_type)
+        if gql_type is None:
+            raise ValueError(f"Type '{python_type!r}' does not have GQL scalar equivalent")
+
+        if required:
+            return graphql.GraphQLNonNull(gql_type)
+        else:
+            return gql_type

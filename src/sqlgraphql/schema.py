@@ -38,7 +38,7 @@ class SchemaBuilder:
         self._query_root_members: dict[str, GraphQLField] = {}
         self._type_map = TypeMap()
         self._orm_type_registry = TypeRegistry()
-        self._gql_type_registry = ScalarTypeRegistry()
+        self._gql_type_registry = ScalarTypeRegistry(self._type_map)
         self._enum_builder = EnumBuilder(self._type_map)
         self._sortable_builder = SortableArgumentBuilder(self._type_map)
 
