@@ -34,8 +34,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.type_api import TypeEngine
 from sqlalchemy_utils import ChoiceType, JSONType, UUIDType
 
-from sqlgraphql.builders import SchemaBuilder
 from sqlgraphql.model import QueryableNode
+from sqlgraphql.schema import SchemaBuilder
 
 
 class DummyEnum(enum.Enum):

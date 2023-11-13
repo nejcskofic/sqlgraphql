@@ -14,10 +14,10 @@ Library for generating SQL queries from GraphQL queries using graphene.
 - Filtering logic
   - Input object creation with oneof
   - Composite filters with and/or/not
-- Sorting logic
 - Efficient queries
   - Defining relations (1..n, n..1, n..n?)
   - Walking AST to create single query for (n..1 relation)
   - Batching or other queries (n..n relations)
   - Walking AST breath first instead of depth first?
 - Mixed mode definitions (DB query and other pure python side resolvers)
+- GQL validation via oneOf directive (custom print_schema + custom validator)

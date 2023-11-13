@@ -1,7 +1,7 @@
 import datetime
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
+from typing import TypeVar, cast
 from uuid import UUID
 
 import graphql
@@ -42,3 +42,32 @@ class ScalarTypeRegistry:
             return graphql.GraphQLNonNull(gql_type)
         else:
             return gql_type
+
+
+TGraphQLNamedType = TypeVar("TGraphQLNamedType", bound=graphql.GraphQLNamedType)
+
+
+class TypeMap:
+    __slots__ = ("_map",)
+
+    def __init__(self) -> None:
+        self._map: dict[str, graphql.GraphQLNamedType] = {}
+
+    def add(self, gql_type: TGraphQLNamedType) -> TGraphQLNamedType:
+        name = gql_type.name
+        if name in self._map:
+            raise ValueError(f"Name '{name}' has already been registered.")
+        self._map[name] = gql_type
+        return gql_type
+
+    def get_unique_name(self, name: str, suffix: str = "") -> str:
+        unique_name = name + suffix
+        if unique_name not in self._map:
+            return unique_name
+
+        idx = 1
+        while True:
+            unique_name = f"{name}{idx}{suffix}"
+            if unique_name not in self._map:
+                return unique_name
+            idx += 1

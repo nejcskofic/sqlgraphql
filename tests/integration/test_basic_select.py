@@ -2,8 +2,8 @@ import pytest
 from graphql import print_schema
 from sqlalchemy import select
 
-from sqlgraphql.builders import SchemaBuilder
 from sqlgraphql.model import QueryableNode
+from sqlgraphql.schema import SchemaBuilder
 from tests.integration.conftest import UserDB
 
 
