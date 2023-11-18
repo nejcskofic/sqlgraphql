@@ -1,10 +1,11 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from graphql import GraphQLResolveInfo
-from sqlalchemy import Row, Select
+from sqlalchemy import Row
 
-from sqlgraphql._ast import AnalyzedNode, SortDirection, transform_query
+from sqlgraphql._ast import AnalyzedNode, transform_query
+from sqlgraphql._builders.util import QueryTransformer
 from sqlgraphql.types import TypedResolveContext
 
 
@@ -18,51 +19,17 @@ class DbFieldResolver:
         return parent._mapping.get(self._field_name)
 
 
-class _ListResolverBase:
-    __slots__ = ("_node",)
+class ListResolver:
+    __slots__ = ("_node", "_transformers")
 
-    def __init__(self, node: AnalyzedNode):
+    def __init__(self, node: AnalyzedNode, transformers: Sequence[QueryTransformer]):
         self._node = node
+        self._transformers = transformers
 
-    def _transform(self, info: GraphQLResolveInfo, **kwargs: Any) -> Select:
-        return transform_query(info, self._node)
+    def __call__(self, parent: object | None, info: GraphQLResolveInfo, **kwargs: Any) -> Iterable:
+        query = transform_query(info, self._node)
+        for transformer in self._transformers:
+            query = transformer(query, self._node, info, **kwargs)
 
-
-class ListResolver(_ListResolverBase):
-    def __call__(self, parent: object | None, info: GraphQLResolveInfo) -> Iterable:
-        query = self._transform(info)
-        context: TypedResolveContext = info.context
-        return context["db_session"].execute(query)
-
-
-class SortableListResolver(_ListResolverBase):
-    def _transform(
-        self,
-        info: GraphQLResolveInfo,
-        sort: list[dict[str, SortDirection]] | None = None,
-        **kwargs: Any,
-    ) -> Select:
-        query = super()._transform(info, **kwargs)
-        if sort is not None:
-            for part in sort:
-                if len(part) != 1:
-                    # TODO: Better error message (integrate oneOf directive?)
-                    raise ValueError("Expected single entry object")
-                field_name, direction = next(iter(part.items()))
-                field = self._node.fields[field_name]
-                query = query.order_by(
-                    field.orm_field.asc()
-                    if direction == SortDirection.ASC
-                    else field.orm_field.desc()
-                )
-        return query
-
-    def __call__(
-        self,
-        parent: object | None,
-        info: GraphQLResolveInfo,
-        sort: list[dict[str, SortDirection]] | None = None,
-    ) -> Iterable:
-        query = self._transform(info, sort=sort)
         context: TypedResolveContext = info.context
         return context["db_session"].execute(query)

@@ -20,7 +20,7 @@ from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._builders.sorting import SortableArgumentBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
-from sqlgraphql._resolvers import DbFieldResolver, ListResolver, SortableListResolver
+from sqlgraphql._resolvers import DbFieldResolver, ListResolver
 from sqlgraphql.model import QueryableNode
 
 
@@ -61,18 +61,15 @@ class SchemaBuilder:
             },
         )
 
-        args = {}
-        resolve_cls: type[ListResolver] | type[SortableListResolver]
+        args: dict[str, GraphQLArgument] = {}
+        transformers = []
         if sortable:
-            args["sort"] = GraphQLArgument(
-                GraphQLList(self._sortable_builder.build_from_node(analyzed_node))
-            )
-            resolve_cls = SortableListResolver
-        else:
-            resolve_cls = ListResolver
+            sortable_config = self._sortable_builder.build_from_node(analyzed_node)
+            args[sortable_config.arg_name] = GraphQLArgument(sortable_config.arg_gql_type)
+            transformers.append(sortable_config.transformer)
 
         self._query_root_members[name] = GraphQLField(
-            GraphQLList(object_type), args=args, resolve=resolve_cls(analyzed_node)
+            GraphQLList(object_type), args=args, resolve=ListResolver(analyzed_node, transformers)
         )
         return self
 

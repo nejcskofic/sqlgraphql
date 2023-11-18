@@ -1,4 +1,3 @@
-import enum
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -99,8 +98,3 @@ def transform_query(info: GraphQLResolveInfo, node: AnalyzedNode) -> sqlalchemy.
     visitor = _TransformQueryVisitor(info, node)
     visit(info.field_nodes[0], visitor)
     return visitor.query
-
-
-class SortDirection(enum.Enum):
-    ASC = enum.auto()
-    DESC = enum.auto()

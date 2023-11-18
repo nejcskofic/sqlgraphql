@@ -1,8 +1,24 @@
-from graphql import GraphQLEnumType, GraphQLInputField, GraphQLInputObjectType
+import enum
+from typing import Any
 
-from sqlgraphql._ast import AnalyzedNode, SortDirection
+from graphql import (
+    GraphQLEnumType,
+    GraphQLInputField,
+    GraphQLInputObjectType,
+    GraphQLList,
+    GraphQLResolveInfo,
+)
+from sqlalchemy import Select
+
+from sqlgraphql._ast import AnalyzedNode
+from sqlgraphql._builders.util import GQLFieldModifiers
 from sqlgraphql._gql import TypeMap
 from sqlgraphql._utils import CacheDict
+
+
+class SortDirection(enum.Enum):
+    ASC = enum.auto()
+    DESC = enum.auto()
 
 
 class SortableArgumentBuilder:
@@ -20,8 +36,9 @@ class SortableArgumentBuilder:
             self._construct_sort_argument_type
         )
 
-    def build_from_node(self, node: AnalyzedNode) -> GraphQLInputObjectType:
-        return self._cache[node]
+    def build_from_node(self, node: AnalyzedNode) -> GQLFieldModifiers:
+        input_object = self._cache[node]
+        return GQLFieldModifiers("sort", GraphQLList(input_object), _transform_sortable_query)
 
     def _construct_sort_argument_type(self, node: AnalyzedNode) -> GraphQLInputObjectType:
         return self._type_map.add(
@@ -33,3 +50,26 @@ class SortableArgumentBuilder:
                 },
             )
         )
+
+
+def _transform_sortable_query(
+    query: Select,
+    node: AnalyzedNode,
+    info: GraphQLResolveInfo,
+    *,
+    sort: list[dict[str, SortDirection]] | None = None,
+    **kwargs: Any,
+) -> Select:
+    if sort is None:
+        return query
+
+    for part in sort:
+        if len(part) != 1:
+            # TODO: Better error message (integrate oneOf directive?)
+            raise ValueError("Expected single entry object")
+        field_name, direction = next(iter(part.items()))
+        field = node.fields[field_name]
+        query = query.order_by(
+            field.orm_field.asc() if direction == SortDirection.ASC else field.orm_field.desc()
+        )
+    return query
