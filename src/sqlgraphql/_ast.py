@@ -1,12 +1,15 @@
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import sqlalchemy
 from graphql import (
     FieldNode,
     FragmentDefinitionNode,
     FragmentSpreadNode,
+    GraphQLEnumType,
+    GraphQLNonNull,
     GraphQLResolveInfo,
+    GraphQLScalarType,
     Node,
     Visitor,
     VisitorAction,
@@ -17,12 +20,18 @@ from sqlalchemy.sql.type_api import TypeEngine
 from sqlgraphql.model import QueryableNode
 
 
+@dataclass(slots=True, kw_only=True)
+class FieldData:
+    gql_type: GraphQLScalarType | GraphQLNonNull | GraphQLEnumType | None = None
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AnalyzedField:
     orm_name: str
-    gql_name: str
     orm_field: sqlalchemy.ColumnElement
     required: bool
+    gql_name: str
+    data: FieldData = field(default_factory=FieldData, compare=False)
 
     @property
     def orm_type(self) -> TypeEngine:
