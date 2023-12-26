@@ -7,7 +7,6 @@ from graphql import (
     FragmentDefinitionNode,
     FragmentSpreadNode,
     GraphQLEnumType,
-    GraphQLNonNull,
     GraphQLResolveInfo,
     GraphQLScalarType,
     Node,
@@ -22,7 +21,8 @@ from sqlgraphql.model import QueryableNode
 
 @dataclass(slots=True, kw_only=True)
 class FieldData:
-    gql_type: GraphQLScalarType | GraphQLNonNull | GraphQLEnumType | None = None
+    python_type: type | None = None
+    gql_type: GraphQLScalarType | GraphQLEnumType | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

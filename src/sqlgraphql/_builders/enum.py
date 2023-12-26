@@ -2,7 +2,7 @@ import enum
 from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
-from graphql import GraphQLEnumType, GraphQLNonNull
+from graphql import GraphQLEnumType
 from graphql.pyutils import snake_to_camel
 from sqlalchemy import Enum
 from sqlalchemy.sql.type_api import TypeEngine
@@ -32,9 +32,7 @@ class EnumBuilder:
         self._type_handlers = self._build_default_handlers()
         self._cache = CacheDict[type[enum.Enum], GraphQLEnumType](self._construct_gql_enum)
 
-    def build_from_field(
-        self, field: AnalyzedField
-    ) -> GraphQLEnumType | GraphQLNonNull[GraphQLEnumType] | None:
+    def build_from_field(self, field: AnalyzedField) -> GraphQLEnumType | None:
         handler = self._type_handlers.get(type(field.orm_type))
         if handler is None:
             return None
@@ -51,10 +49,7 @@ class EnumBuilder:
             case _:
                 assert False, "Should not happen"
 
-        if field.required:
-            return GraphQLNonNull(gql_type)
-        else:
-            return gql_type
+        return gql_type
 
     def _construct_gql_enum(self, enum_cls: type[enum.Enum]) -> GraphQLEnumType:
         # Library will either use enum values or enum keys. It will not work with actual

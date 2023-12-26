@@ -13,7 +13,7 @@ from sqlalchemy import Select
 from sqlgraphql._ast import AnalyzedNode
 from sqlgraphql._builders.util import GQLFieldModifiers
 from sqlgraphql._gql import TypeMap
-from sqlgraphql._utils import CacheDict
+from sqlgraphql._utils import CacheDict, get_single_key_value
 
 
 class SortDirection(enum.Enum):
@@ -64,10 +64,7 @@ def _transform_sortable_query(
         return query
 
     for part in sort:
-        if len(part) != 1:
-            # TODO: Better error message (integrate oneOf directive?)
-            raise ValueError("Expected single entry object")
-        field_name, direction = next(iter(part.items()))
+        field_name, direction = get_single_key_value(part)
         field = node.fields[field_name]
         query = query.order_by(
             field.orm_field.asc() if direction == SortDirection.ASC else field.orm_field.desc()

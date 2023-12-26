@@ -63,10 +63,17 @@ def insert_data(session_factory):
 
 @pytest.fixture()
 def executor(session_factory):
-    def executor(schema: GraphQLSchema, query: str) -> ExecutionResult:
+    def executor(
+        schema: GraphQLSchema,
+        query: str,
+        variables: dict[str, Any] | None = None,
+    ) -> ExecutionResult:
         with session_factory.begin() as session:
             return graphql_sync(
-                schema, query, context_value=TypedResolveContext(db_session=session)
+                schema,
+                query,
+                variable_values=variables,
+                context_value=TypedResolveContext(db_session=session),
             )
 
     return executor
@@ -82,11 +89,15 @@ def query_watcher(database_engine):
 
 class _QueryWatcher:
     def __init__(self):
-        self._executed_queries = []
+        self._executed: list[tuple[str, Any]] = []
 
     @property
     def executed_queries(self) -> Sequence[str]:
-        return self._executed_queries
+        return [query for query, _ in self._executed]
+
+    @property
+    def executed_queries_with_args(self) -> Sequence[tuple[str, Any]]:
+        return self._executed
 
     def on_before_cursor_execute(
         self,
@@ -98,4 +109,4 @@ class _QueryWatcher:
         executemany: bool,
     ):
         statement = re.sub(r"\s+", " ", statement)
-        self._executed_queries.append(statement)
+        self._executed.append((statement, parameters))

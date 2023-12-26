@@ -1,3 +1,5 @@
+import enum
+
 from graphql import (
     GraphQLEnumType,
     GraphQLField,
@@ -35,11 +37,9 @@ class ObjectBuilder:
         fields = {}
 
         for entry in node.fields.values():
-            gql_type = entry.data.gql_type
-            if gql_type is None:
-                entry.data.gql_type = gql_type = self._convert_to_gql_type(entry)
+            gql_type = self._convert_to_gql_type(entry)
             fields[entry.gql_name] = GraphQLField(
-                gql_type,
+                GraphQLNonNull(gql_type) if entry.required else gql_type,
                 resolve=DbFieldResolver(entry.orm_name),
             )
 
@@ -50,11 +50,19 @@ class ObjectBuilder:
             )
         )
 
-    def _convert_to_gql_type(
-        self, field: AnalyzedField
-    ) -> GraphQLScalarType | GraphQLNonNull | GraphQLEnumType:
+    def _convert_to_gql_type(self, field: AnalyzedField) -> GraphQLScalarType | GraphQLEnumType:
+        data = field.data
+        if data.gql_type is not None:
+            return data.gql_type
+
+        # If field is enum, build enum
         enum_type = self._enum_builder.build_from_field(field)
         if enum_type is not None:
+            data.python_type = enum.Enum
+            data.gql_type = enum_type
             return enum_type
-        python_type = self._orm_type_registry.get_python_type(field.orm_type)
-        return self._gql_type_registry.get_scalar_type(python_type, field.required)
+
+        # Treat as scalar
+        data.python_type = python_type = self._orm_type_registry.get_python_type(field.orm_type)
+        data.gql_type = self._gql_type_registry.get_scalar_type(python_type)
+        return data.gql_type

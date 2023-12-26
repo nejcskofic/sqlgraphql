@@ -67,14 +67,9 @@ class ScalarTypeRegistry:
         self._type_map = type_map
         self._mapping = mapping
 
-    def get_scalar_type(
-        self, python_type: type, required: bool
-    ) -> graphql.GraphQLScalarType | graphql.GraphQLNonNull:
+    def get_scalar_type(self, python_type: type) -> graphql.GraphQLScalarType:
         gql_type = self._mapping.get(python_type)
         if gql_type is None:
             raise ValueError(f"Type '{python_type!r}' does not have GQL scalar equivalent")
 
-        if required:
-            return graphql.GraphQLNonNull(gql_type)
-        else:
-            return gql_type
+        return gql_type
