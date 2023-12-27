@@ -34,6 +34,9 @@ class TestFilterableLists:
             "  id: IntFilterInputObject\n"
             "  name: StrFilterInputObject\n"
             "  registrationDate: DateFilterInputObject\n"
+            "  _and: [UserFilterInputObject!]\n"
+            "  _or: [UserFilterInputObject!]\n"
+            "  _not: UserFilterInputObject\n"
             "}\n"
             "\n"
             "input IntFilterInputObject {\n"
@@ -199,5 +202,125 @@ class TestFilterableLists:
                     " WHERE users.name IN (?, ?) AND users.registration_date > ?"
                 ),
                 ("user1", "user2", "2000-01-01"),
+            )
+        ]
+
+    def test_and_filter(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                users (
+                    filter: [{
+                        _and: [
+                            {name: {in: ["user1", "user2"]}},
+                            {registrationDate: {gt: "2000-01-01"}}
+                        ]
+                    }]
+                ) {
+                    name
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {"users": [dict(name="user2")]}
+        assert query_watcher.executed_queries_with_args == [
+            (
+                (
+                    "SELECT users.name FROM users"
+                    " WHERE users.name IN (?, ?) AND users.registration_date > ?"
+                ),
+                ("user1", "user2", "2000-01-01"),
+            )
+        ]
+
+    def test_or_filter(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                users (
+                    filter: [{
+                        _or: [
+                            {name: {in: ["user1", "user2"]}},
+                            {registrationDate: {gt: "2000-01-01"}}
+                        ]
+                    }]
+                ) {
+                    name
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {"users": [dict(name="user1"), dict(name="user2")]}
+        assert query_watcher.executed_queries_with_args == [
+            (
+                (
+                    "SELECT users.name FROM users"
+                    " WHERE users.name IN (?, ?) OR users.registration_date > ?"
+                ),
+                ("user1", "user2", "2000-01-01"),
+            )
+        ]
+
+    def test_not_filter(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                users (
+                    filter: [{
+                        _not: {name: {in: ["user1", "user2"]}}
+                    }]
+                ) {
+                    name
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {"users": []}
+        assert query_watcher.executed_queries_with_args == [
+            (
+                ("SELECT users.name FROM users" " WHERE (users.name NOT IN (?, ?))"),
+                ("user1", "user2"),
+            )
+        ]
+
+    def test_complex_composition(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                users (
+                    filter: [{
+                        _or: [
+                            {name: {in: ["user1", "user3"]}},
+                            {_and: [
+                                {registrationDate: {gte: "2000-01-01"}},
+                                {registrationDate: {lte: "2000-01-03"}},
+                                {_not: {registrationDate: {eq: "2000-01-02"}}}
+                            ]}
+                        ]
+                    }]
+                ) {
+                    name
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {"users": [dict(name="user1")]}
+        assert query_watcher.executed_queries_with_args == [
+            (
+                (
+                    "SELECT users.name FROM users"
+                    " WHERE users.name IN (?, ?) OR"
+                    " users.registration_date >= ? AND users.registration_date <= ?"
+                    " AND users.registration_date != ?"
+                ),
+                ("user1", "user3", "2000-01-01", "2000-01-03", "2000-01-02"),
             )
         ]

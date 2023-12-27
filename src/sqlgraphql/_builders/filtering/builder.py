@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Union, cast
 
 from graphql import (
     GraphQLEnumType,
     GraphQLInputField,
     GraphQLInputObjectType,
     GraphQLList,
+    GraphQLNonNull,
     GraphQLResolveInfo,
     GraphQLScalarType,
 )
 from graphql.pyutils import snake_to_camel
-from sqlalchemy import ColumnExpressionArgument, Select
+from sqlalchemy import ColumnExpressionArgument, Select, and_, not_, or_
 
 from sqlgraphql._ast import AnalyzedNode
 from sqlgraphql._builders.filtering.base import FilterOp, TypeFilterRegistry
@@ -34,6 +37,12 @@ class _ScalarFilterType(NamedTuple):
 class _FilterInputType(NamedTuple):
     gql_object: GraphQLInputObjectType
     apply_map: Mapping[tuple[str, str], FilterOp]
+
+
+class _CompositeFilterNames:
+    AND = "_and"
+    OR = "_or"
+    NOT = "_not"
 
 
 class FilteringArgumentBuilder:
@@ -95,14 +104,32 @@ class FilteringArgumentBuilder:
 
         gql_type = self._type_map.add(
             GraphQLInputObjectType(
-                self._type_map.get_unique_name(node.node.name, self._TYPE_SUFFIX), fields
+                self._type_map.get_unique_name(node.node.name, self._TYPE_SUFFIX), lambda: fields
             )
         )
+
+        # modify fields to include composites
+        self._apply_filter_composites(gql_type, fields)
+
         return _FilterInputType(gql_type, apply_map)
+
+    @classmethod
+    def _apply_filter_composites(
+        cls, gql_input_object: GraphQLInputObjectType, fields: dict[str, GraphQLInputField]
+    ) -> None:
+        fields[_CompositeFilterNames.AND] = GraphQLInputField(
+            GraphQLList(GraphQLNonNull(gql_input_object))
+        )
+        fields[_CompositeFilterNames.OR] = GraphQLInputField(
+            GraphQLList(GraphQLNonNull(gql_input_object))
+        )
+        fields[_CompositeFilterNames.NOT] = GraphQLInputField(gql_input_object)
 
 
 _ScalarFilterData = dict[str, Any]
-_EntityFilterData = dict[str, _ScalarFilterData]
+_EntityFilterData = dict[
+    str, Union[_ScalarFilterData, "_EntityFilterData", list["_EntityFilterData"]]
+]
 
 
 class FilterQueryTransformer:
@@ -124,7 +151,20 @@ class FilterQueryTransformer:
         return query.where(*(self._apply_filter(entry) for entry in filter))
 
     def _apply_filter(self, filter_data: _EntityFilterData) -> ColumnExpressionArgument[bool]:
-        field_name, filter_pair = get_single_key_value(filter_data)
-        filter_name, filter_value = get_single_key_value(filter_pair)
-        apply_func = self._apply_map[(field_name, filter_name)]
-        return apply_func(filter_value)
+        field_name, filter_arg = get_single_key_value(filter_data)
+        if field_name == _CompositeFilterNames.NOT:
+            return not_(self._apply_filter(cast(_EntityFilterData, filter_arg)))
+        elif field_name == _CompositeFilterNames.AND:
+            filter_arg = cast(list[_EntityFilterData], filter_arg)
+            if not len(filter_arg):
+                raise ValueError("There should be at least one element for AND block")
+            return and_(*(self._apply_filter(entry) for entry in filter_arg))
+        elif field_name == _CompositeFilterNames.OR:
+            filter_arg = cast(list[_EntityFilterData], filter_arg)
+            if not len(filter_arg):
+                raise ValueError("There should be at least one element for OR block")
+            return or_(*(self._apply_filter(entry) for entry in filter_arg))
+        else:
+            filter_name, filter_value = get_single_key_value(cast(_ScalarFilterData, filter_arg))
+            apply_func = self._apply_map[(field_name, filter_name)]
+            return apply_func(filter_value)
