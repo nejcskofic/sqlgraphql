@@ -13,7 +13,6 @@ from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import DbFieldResolver
-from sqlgraphql._utils import CacheDict
 
 
 class ObjectBuilder:
@@ -28,10 +27,12 @@ class ObjectBuilder:
         self._enum_builder = enum_builder
         self._orm_type_registry = orm_type_registry
         self._gql_type_registry = gql_type_registry
-        self._cache = CacheDict[AnalyzedNode, GraphQLObjectType](self._build_gql_object)
 
     def build_object(self, node: AnalyzedNode) -> GraphQLObjectType:
-        return self._cache[node]
+        data = node.data
+        if data.gql_type is None:
+            data.gql_type = self._build_gql_object(node)
+        return data.gql_type
 
     def _build_gql_object(self, node: AnalyzedNode) -> GraphQLObjectType:
         fields = {}

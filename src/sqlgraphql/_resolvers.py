@@ -33,3 +33,13 @@ class ListResolver:
 
         context: TypedResolveContext = info.context
         return context["db_session"].execute(query)
+
+
+class FieldResolver:
+    __slots__ = ("_field_name",)
+
+    def __init__(self, field_name: str):
+        self._field_name = field_name
+
+    def __call__(self, parent: Any, info: GraphQLResolveInfo) -> Any:
+        return getattr(parent, self._field_name)

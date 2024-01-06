@@ -1,14 +1,24 @@
+from __future__ import annotations
+
 import datetime
 import re
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 import pytest
 from graphql import ExecutionResult, GraphQLSchema, graphql_sync
-from sqlalchemy import Connection, String, create_engine, event
+from sqlalchemy import Connection, ForeignKey, String, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPICursor, ExecutionContext
 from sqlalchemy.future import Engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 from sqlgraphql.types import TypedResolveContext
 
@@ -36,6 +46,19 @@ class UserDB(Base):
     name: Mapped[str] = mapped_column(String(200))
     registration_date: Mapped[datetime.date]
 
+    post: Mapped[list[PostDB]] = relationship(back_populates="user")
+
+
+class PostDB(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[int] = mapped_column(ForeignKey(UserDB.id))
+    header: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str]
+
+    user: Mapped[UserDB] = relationship(back_populates="post")
+
 
 @pytest.fixture(scope="session")
 def database_engine(tmp_path_factory) -> Engine:
@@ -52,13 +75,29 @@ def session_factory(database_engine) -> SessionFactory:
 
 @pytest.fixture(scope="session", autouse=True)
 def insert_data(session_factory):
-    with session_factory.begin() as session:
-        session.add_all(
-            [
-                UserDB(name="user1", registration_date=datetime.date(2000, 1, 1)),
-                UserDB(name="user2", registration_date=datetime.date(2000, 1, 2)),
-            ]
-        )
+    with session_factory() as session:
+        user1 = UserDB(name="user1", registration_date=datetime.date(2000, 1, 1))
+        user2 = UserDB(name="user2", registration_date=datetime.date(2000, 1, 2))
+
+        session.add_all([user1, user2])
+        session.commit()
+
+        bodies = [
+            "Some interesting post",
+            "Why everything is the best",
+            "This new shiny thing solves all the problems",
+        ]
+
+        for i in range(75):
+            session.add(
+                PostDB(user_id=user1.id, header=f"Post {i + 1:03}", body=bodies[i % len(bodies)])
+            )
+
+        for i in range(75, 100):
+            session.add(
+                PostDB(user_id=user2.id, header=f"Post {i + 1}", body=bodies[i % len(bodies)])
+            )
+        session.commit()
 
 
 @pytest.fixture()

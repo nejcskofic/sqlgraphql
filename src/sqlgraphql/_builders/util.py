@@ -1,7 +1,8 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from graphql import GraphQLInputObjectType, GraphQLList, GraphQLResolveInfo
+from graphql import GraphQLArgument, GraphQLResolveInfo
 from sqlalchemy import Select
 
 from sqlgraphql._ast import AnalyzedNode
@@ -16,6 +17,5 @@ class QueryTransformer(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class GQLFieldModifiers:
-    arg_name: str
-    arg_gql_type: GraphQLInputObjectType | GraphQLList
+    args: Mapping[str, GraphQLArgument]
     transformer: QueryTransformer

@@ -2,6 +2,7 @@ import enum
 from typing import Any
 
 from graphql import (
+    GraphQLArgument,
     GraphQLEnumType,
     GraphQLInputField,
     GraphQLInputObjectType,
@@ -38,7 +39,9 @@ class SortableArgumentBuilder:
 
     def build_from_node(self, node: AnalyzedNode) -> GQLFieldModifiers:
         input_object = self._cache[node]
-        return GQLFieldModifiers("sort", GraphQLList(input_object), _transform_sortable_query)
+        return GQLFieldModifiers(
+            dict(sort=GraphQLArgument(GraphQLList(input_object))), _transform_sortable_query
+        )
 
     def _construct_sort_argument_type(self, node: AnalyzedNode) -> GraphQLInputObjectType:
         return self._type_map.add(

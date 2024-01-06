@@ -15,6 +15,7 @@ from sqlalchemy import Column
 from sqlgraphql._ast import AnalyzedField, AnalyzedNode
 from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._builders.filtering.builder import FilteringArgumentBuilder
+from sqlgraphql._builders.pagination import OffsetPagedArgumentBuilder
 from sqlgraphql._builders.selecting import ObjectBuilder
 from sqlgraphql._builders.sorting import SortableArgumentBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
@@ -45,9 +46,16 @@ class SchemaBuilder:
         )
         self._sortable_builder = SortableArgumentBuilder(self._type_map)
         self._filter_builder = FilteringArgumentBuilder(self._type_map)
+        self._offset_paged_builder = OffsetPagedArgumentBuilder(self._type_map)
 
     def add_root_list(
-        self, name: str, node: QueryableNode, *, sortable: bool = False, filterable: bool = False
+        self,
+        name: str,
+        node: QueryableNode,
+        *,
+        sortable: bool = False,
+        filterable: bool = False,
+        pageable: bool = False,
     ) -> SchemaBuilder:
         if name in self._query_root_members:
             raise ValueError(f"Name '{name}' has already been used")
@@ -60,17 +68,26 @@ class SchemaBuilder:
         transformers = []
         if sortable:
             sortable_config = self._sortable_builder.build_from_node(analyzed_node)
-            args[sortable_config.arg_name] = GraphQLArgument(sortable_config.arg_gql_type)
+            args.update(sortable_config.args)
             transformers.append(sortable_config.transformer)
 
         if filterable:
             filterable_config = self._filter_builder.build_filter(analyzed_node)
-            args[filterable_config.arg_name] = GraphQLArgument(filterable_config.arg_gql_type)
+            args.update(filterable_config.args)
             transformers.append(filterable_config.transformer)
 
-        self._query_root_members[name] = GraphQLField(
-            GraphQLList(object_type), args=args, resolve=ListResolver(analyzed_node, transformers)
-        )
+        if pageable:
+            field = self._offset_paged_builder.build_paged_list_field(
+                analyzed_node, args, transformers
+            )
+        else:
+            field = GraphQLField(
+                GraphQLList(object_type),
+                args=args,
+                resolve=ListResolver(analyzed_node, transformers),
+            )
+
+        self._query_root_members[name] = field
         return self
 
     def build(self) -> GraphQLSchema:

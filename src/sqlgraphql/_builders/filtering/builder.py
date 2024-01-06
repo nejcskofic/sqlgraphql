@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, NamedTuple, Union, cast
 
 from graphql import (
+    GraphQLArgument,
     GraphQLEnumType,
     GraphQLInputField,
     GraphQLInputObjectType,
@@ -61,8 +62,7 @@ class FilteringArgumentBuilder:
     def build_filter(self, node: AnalyzedNode) -> GQLFieldModifiers:
         filter_object = self._gql_input_object_type_cache[node]
         return GQLFieldModifiers(
-            arg_name="filter",
-            arg_gql_type=GraphQLList(filter_object.gql_object),
+            dict(filter=GraphQLArgument(GraphQLList(filter_object.gql_object))),
             transformer=FilterQueryTransformer(filter_object.apply_map),
         )
 
