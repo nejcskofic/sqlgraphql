@@ -4,7 +4,7 @@ class GQLBuilderException(Exception):
     """
 
 
-class InvalidStateException(Exception):
+class InvalidOperationException(Exception):
     """
     State of the class does not allow performing requested operation
     """

@@ -16,10 +16,11 @@ from graphql import (
 from sqlalchemy import Select, func
 from sqlalchemy.orm import Session
 
-from sqlgraphql._ast import AnalyzedNode, transform_query
+from sqlgraphql._ast import AnalyzedNode
 from sqlgraphql._builders.util import QueryTransformer
 from sqlgraphql._gql import TypeMap
 from sqlgraphql._resolvers import FieldResolver
+from sqlgraphql._transformers import transform_query
 from sqlgraphql._utils import CacheDict
 from sqlgraphql.types import TypedResolveContext
 

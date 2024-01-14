@@ -4,8 +4,9 @@ from typing import Any
 from graphql import GraphQLResolveInfo
 from sqlalchemy import Row
 
-from sqlgraphql._ast import AnalyzedNode, transform_query
+from sqlgraphql._ast import AnalyzedNode
 from sqlgraphql._builders.util import QueryTransformer
+from sqlgraphql._transformers import transform_query
 from sqlgraphql.types import TypedResolveContext
 
 

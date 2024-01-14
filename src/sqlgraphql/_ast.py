@@ -1,23 +1,22 @@
-from collections.abc import Iterator, Mapping, Sequence
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import NamedTuple
 
 import sqlalchemy
 from graphql import (
-    FieldNode,
-    FragmentSpreadNode,
     GraphQLEnumType,
     GraphQLObjectType,
-    GraphQLResolveInfo,
     GraphQLScalarType,
-    InlineFragmentNode,
-    SelectionNode,
 )
-from sqlalchemy import ColumnElement
+from sqlalchemy import Column, ForeignKeyConstraint
 from sqlalchemy.sql.type_api import TypeEngine
 
-from sqlgraphql.exceptions import InvalidStateException
-from sqlgraphql.model import QueryableNode
+from sqlgraphql._orm import get_implicit_relation
+from sqlgraphql._utils import CacheDictCM
+from sqlgraphql.exceptions import GQLBuilderException, InvalidOperationException
+from sqlgraphql.model import Link, QueryableNode
 
 
 @dataclass(slots=True, kw_only=True)
@@ -40,6 +39,25 @@ class AnalyzedField:
 
 
 @dataclass(slots=True, kw_only=True)
+class LinkData:
+    remote_node: AnalyzedNode | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AnalyzedLink:
+    gql_name: str
+    node_accessor: Callable[[], AnalyzedNode]
+    relationship: ForeignKeyConstraint
+    data: LinkData = field(default_factory=LinkData, compare=False)
+
+    @property
+    def node(self) -> AnalyzedNode:
+        if self.data.remote_node is None:
+            self.data.remote_node = self.node_accessor()
+        return self.data.remote_node
+
+
+@dataclass(slots=True, kw_only=True)
 class NodeData:
     gql_type: GraphQLObjectType | None = None
 
@@ -48,6 +66,7 @@ class NodeData:
 class AnalyzedNode:
     node: QueryableNode
     fields: Mapping[str, AnalyzedField]
+    links: Mapping[str, AnalyzedLink]
     data: NodeData = field(default_factory=NodeData, compare=False)
 
     def __hash__(self) -> int:
@@ -57,88 +76,67 @@ class AnalyzedNode:
         return self is other
 
 
-class _FieldInfo(NamedTuple):
-    name: str
-    node: FieldNode
+class Analyzer:
+    def __init__(self, field_name_converter: Callable[[str], str]):
+        self._field_name_converter = field_name_converter
 
+        self._analyzed_nodes = CacheDictCM[QueryableNode, AnalyzedNode](self._create_analyzed_node)
 
-class _FieldWalker:
-    __slots__ = ("_info", "_node_stack", "_current_relative_path")
+    def get(self, node: QueryableNode) -> AnalyzedNode:
+        return self._analyzed_nodes[node]
 
-    def __init__(self, node: FieldNode, info: GraphQLResolveInfo):
-        self._info = info
-        self._node_stack = [node]
-        self._current_relative_path: list[str] = []
-
-    def descend(self, member: str, raise_: bool = False) -> bool:
-        for child in self.children():
-            if child.name == member:
-                break
-        else:
-            if raise_:
-                raise ValueError(f"No child with name '{member}'")
+    @contextmanager
+    def _create_analyzed_node(self, node: QueryableNode) -> Iterator[AnalyzedNode]:
+        columns = node.query.selected_columns
+        field_name_converter = self._field_name_converter
+        analyzed_fields = {}
+        for column in columns:
+            if isinstance(column, Column) and column.nullable is not None:
+                required = not column.nullable
             else:
-                return False
+                # we don't have information, assume weaker constraint
+                required = False
 
-        self._node_stack.append(child.node)
-        self._current_relative_path.append(child.name)
-        return True
+            gql_field_name = field_name_converter(column.name)
+            analyzed_fields[gql_field_name] = AnalyzedField(
+                orm_name=column.name,
+                gql_name=gql_field_name,
+                orm_field=column,
+                required=required,
+            )
 
-    def ascend(self, raise_: bool = False) -> bool:
-        if not self._current_relative_path:
-            if raise_:
-                raise InvalidStateException("We are already at the root")
+        analyzed_links = {}
+        to_process = []
+        for name, value in node.extra.items():
+            if isinstance(value, QueryableNode):
+                analyzed_links[name] = self._create_link(node, name, value)
+                to_process.append(value)
+            elif isinstance(value, Link):
+                analyzed_links[name] = self._create_link(node, name, value.node)
+                to_process.append(value.node)
             else:
-                return False
-        self._node_stack.pop()
-        self._node_stack.pop()
-        assert self._node_stack
-        return True
+                raise InvalidOperationException("Unsupported")
 
-    def children(self) -> Iterator[_FieldInfo]:
-        node = self._node_stack[-1]
-        if node.selection_set is None:
-            return
+        yield AnalyzedNode(node=node, fields=analyzed_fields, links=analyzed_links)
 
-        for selection in node.selection_set.selections:
-            yield from self._materialize_children(selection)
+        for entry in to_process:
+            self.get(entry)
 
-    def _materialize_children(self, node: SelectionNode) -> Iterator[_FieldInfo]:
-        if isinstance(node, FieldNode):
-            yield _FieldInfo(node.name.value, node)
-        elif isinstance(node, FragmentSpreadNode):
-            fragment = self._info.fragments[node.name.value]
-            for selection in fragment.selection_set.selections:
-                yield from self._materialize_children(selection)
-        elif isinstance(node, InlineFragmentNode):
-            for selection in node.selection_set.selections:
-                yield from self._materialize_children(selection)
-        else:
-            raise ValueError(f"Unknown SelectionNode type: {type(node)!r}")
+    def _create_link(
+        self, node: QueryableNode, name: str, remote_node: QueryableNode
+    ) -> AnalyzedLink:
+        try:
+            relation = get_implicit_relation(node.query, remote_node.query)
+        except InvalidOperationException as e:
+            raise GQLBuilderException(
+                f"Failed to determine implicit relation for member '{name}'"
+                f" in node '{node.name}':\n"
+                f"  {e}\n"
+                f"Relationship should be specified explicitly."
+            )
 
-
-def transform_query(
-    info: GraphQLResolveInfo, node: AnalyzedNode, sub_path: Sequence[str] = ()
-) -> sqlalchemy.Select:
-    # TODO: move other transformations (filter, order by) here as well
-    assert len(info.field_nodes) == 1
-    walker = _FieldWalker(info.field_nodes[0], info)
-    requested_fields: list[ColumnElement] | None = None
-    for segment in sub_path:
-        if not walker.descend(segment):
-            requested_fields = []
-            break
-
-    if requested_fields is None:
-        # rewrite query to select only desired fields
-        requested_fields = [
-            node.fields[gql_field_name].orm_field for gql_field_name, _ in walker.children()
-        ]
-
-    orig_query = node.node.query
-    if not requested_fields:
-        # Keep original query if there is no select
-        # Use case is pagination data only without actual select
-        return orig_query
-    else:
-        return orig_query.with_only_columns(*requested_fields)
+        return AnalyzedLink(
+            gql_name=name,
+            node_accessor=lambda: self._analyzed_nodes[remote_node],
+            relationship=relation,
+        )

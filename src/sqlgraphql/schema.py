@@ -10,9 +10,8 @@ from graphql import (
     GraphQLSchema,
 )
 from graphql.pyutils import snake_to_camel
-from sqlalchemy import Column
 
-from sqlgraphql._ast import AnalyzedField, AnalyzedNode
+from sqlgraphql._ast import Analyzer
 from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._builders.filtering.builder import FilteringArgumentBuilder
 from sqlgraphql._builders.pagination import OffsetPagedArgumentBuilder
@@ -21,7 +20,6 @@ from sqlgraphql._builders.sorting import SortableArgumentBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import ListResolver
-from sqlgraphql._utils import CacheDict
 from sqlgraphql.model import QueryableNode
 
 
@@ -31,11 +29,7 @@ def _snake_to_camel_case(value: str) -> str:
 
 class SchemaBuilder:
     def __init__(self, field_name_converter: Callable[[str], str] = _snake_to_camel_case):
-        # config
-        self._field_name_converter = field_name_converter
-
-        # other fields
-        self._analyzed_nodes = CacheDict[QueryableNode, AnalyzedNode](self._create_analyzed_node)
+        self._analyzer = Analyzer(field_name_converter)
         self._query_root_members: dict[str, GraphQLField] = {}
         self._type_map = TypeMap()
         self._orm_type_registry = TypeRegistry()
@@ -60,7 +54,7 @@ class SchemaBuilder:
         if name in self._query_root_members:
             raise ValueError(f"Name '{name}' has already been used")
 
-        analyzed_node = self._analyzed_nodes[node]
+        analyzed_node = self._analyzer.get(node)
 
         object_type = self._object_builder.build_object(analyzed_node)
 
@@ -96,26 +90,3 @@ class SchemaBuilder:
             self._query_root_members,
         )
         return GraphQLSchema(query_type)
-
-    def _create_analyzed_node(self, node: QueryableNode) -> AnalyzedNode:
-        columns = node.query.selected_columns
-        field_name_converter = self._field_name_converter
-        analyzed_fields = {}
-        for column in columns:
-            if isinstance(column, Column) and column.nullable is not None:
-                required = not column.nullable
-            else:
-                # we don't have information, assume weaker constraint
-                required = False
-
-            gql_field_name = field_name_converter(column.name)
-            analyzed_fields[gql_field_name] = AnalyzedField(
-                orm_name=column.name,
-                gql_name=gql_field_name,
-                orm_field=column,
-                required=required,
-            )
-
-        analyzed_node = AnalyzedNode(node=node, fields=analyzed_fields)
-        self._analyzed_nodes[node] = analyzed_node
-        return analyzed_node
