@@ -13,6 +13,7 @@ from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import DbFieldResolver
+from sqlgraphql._transformers import ColumnSelectRule, FieldRules
 
 
 class ObjectBuilder:
@@ -31,24 +32,35 @@ class ObjectBuilder:
     def build_object(self, node: AnalyzedNode) -> GraphQLObjectType:
         data = node.data
         if data.gql_type is None:
-            data.gql_type = self._build_gql_object(node)
+            data.gql_type, data.field_rules = self._build_gql_object(node)
         return data.gql_type
 
-    def _build_gql_object(self, node: AnalyzedNode) -> GraphQLObjectType:
+    def _build_gql_object(
+        self, node: AnalyzedNode
+    ) -> tuple[GraphQLObjectType, dict[str, FieldRules]]:
         fields = {}
+        rules: dict[str, FieldRules] = {}
 
         for entry in node.fields.values():
             gql_type = self._convert_to_gql_type(entry)
             fields[entry.gql_name] = GraphQLField(
                 GraphQLNonNull(gql_type) if entry.required else gql_type,
-                resolve=DbFieldResolver(entry.orm_name),
+                resolve=DbFieldResolver(entry.gql_name),
+            )
+            rules[entry.gql_name] = ColumnSelectRule(
+                entry.orm_field.label(entry.gql_name)
+                if entry.gql_name != entry.orm_name
+                else entry.orm_field
             )
 
-        return self._type_map.add(
-            GraphQLObjectType(
-                self._type_map.get_unique_name(node.node.name),
-                fields,
-            )
+        return (
+            self._type_map.add(
+                GraphQLObjectType(
+                    self._type_map.get_unique_name(node.node.name),
+                    fields,
+                )
+            ),
+            rules,
         )
 
     def _convert_to_gql_type(self, field: AnalyzedField) -> GraphQLScalarType | GraphQLEnumType:

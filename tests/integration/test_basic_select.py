@@ -71,7 +71,7 @@ class TestBasicSelectWithExplicitORMQuery:
             ]
         }
         assert query_watcher.executed_queries == [
-            "SELECT users.id, users.registration_date FROM users"
+            'SELECT users.id, users.registration_date AS "registrationDate" FROM users'
         ]
 
 

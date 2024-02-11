@@ -21,6 +21,7 @@ from sqlgraphql._builders.filtering.base import FilterOp, TypeFilterRegistry
 from sqlgraphql._builders.filtering.filters import BUILTIN_FILTERS
 from sqlgraphql._builders.util import GQLFieldModifiers
 from sqlgraphql._gql import TypeMap
+from sqlgraphql._transformers import ArgumentRule
 from sqlgraphql._utils import CacheDict, get_single_key_value
 from sqlgraphql.exceptions import GQLBuilderException
 
@@ -132,19 +133,12 @@ _EntityFilterData = dict[
 ]
 
 
-class FilterQueryTransformer:
+class FilterQueryTransformer(ArgumentRule):
     def __init__(self, apply_map: Mapping[tuple[str, str], FilterOp]):
         self._apply_map = apply_map
 
-    def __call__(
-        self,
-        query: Select,
-        node: AnalyzedNode,
-        info: GraphQLResolveInfo,
-        *,
-        filter: list[_EntityFilterData] | None = None,
-        **kwargs: Any,
-    ) -> Select:
+    def apply(self, query: Select, info: GraphQLResolveInfo, args: dict[str, Any]) -> Select:
+        filter: list[_EntityFilterData] = args.pop("filter", [])
         if not filter:
             return query
 

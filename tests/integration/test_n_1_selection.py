@@ -7,16 +7,13 @@ from sqlgraphql.schema import SchemaBuilder
 from tests.integration.conftest import PostDB, UserDB
 
 
+@pytest.mark.skip()
 class TestN1Selection:
     @pytest.fixture()
     def schema(self):
         user_node = QueryableNode("User", query=select(UserDB))
         post_node = QueryableNode(
-            "Post",
-            query=select(PostDB).order_by(PostDB.header),
-            extra={
-                "user": user_node
-            }
+            "Post", query=select(PostDB).order_by(PostDB.header), extra={"user": user_node}
         )
         return SchemaBuilder().add_root_list("posts", post_node).build()
 

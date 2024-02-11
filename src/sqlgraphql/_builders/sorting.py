@@ -14,6 +14,7 @@ from sqlalchemy import Select
 from sqlgraphql._ast import AnalyzedNode
 from sqlgraphql._builders.util import GQLFieldModifiers
 from sqlgraphql._gql import TypeMap
+from sqlgraphql._transformers import ArgumentRule
 from sqlgraphql._utils import CacheDict, get_single_key_value
 
 
@@ -40,7 +41,7 @@ class SortableArgumentBuilder:
     def build_from_node(self, node: AnalyzedNode) -> GQLFieldModifiers:
         input_object = self._cache[node]
         return GQLFieldModifiers(
-            dict(sort=GraphQLArgument(GraphQLList(input_object))), _transform_sortable_query
+            dict(sort=GraphQLArgument(GraphQLList(input_object))), _TransformSortableQuery(node)
         )
 
     def _construct_sort_argument_type(self, node: AnalyzedNode) -> GraphQLInputObjectType:
@@ -55,21 +56,18 @@ class SortableArgumentBuilder:
         )
 
 
-def _transform_sortable_query(
-    query: Select,
-    node: AnalyzedNode,
-    info: GraphQLResolveInfo,
-    *,
-    sort: list[dict[str, SortDirection]] | None = None,
-    **kwargs: Any,
-) -> Select:
-    if sort is None:
-        return query
+class _TransformSortableQuery(ArgumentRule):
+    __slots__ = ("_node",)
 
-    for part in sort:
-        field_name, direction = get_single_key_value(part)
-        field = node.fields[field_name]
-        query = query.order_by(
-            field.orm_field.asc() if direction == SortDirection.ASC else field.orm_field.desc()
-        )
-    return query
+    def __init__(self, node: AnalyzedNode):
+        self._node = node
+
+    def apply(self, query: Select, info: GraphQLResolveInfo, args: dict[str, Any]) -> Select:
+        sort: list[dict[str, SortDirection]] = args.pop("sort", [])
+        for part in sort:
+            field_name, direction = get_single_key_value(part)
+            field = self._node.fields[field_name]
+            query = query.order_by(
+                field.orm_field.asc() if direction == SortDirection.ASC else field.orm_field.desc()
+            )
+        return query

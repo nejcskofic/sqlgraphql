@@ -1,12 +1,10 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from typing import Any
 
 from graphql import GraphQLResolveInfo
 from sqlalchemy import Row
 
-from sqlgraphql._ast import AnalyzedNode
-from sqlgraphql._builders.util import QueryTransformer
-from sqlgraphql._transformers import transform_query
+from sqlgraphql._transformers import QueryTransformer
 from sqlgraphql.types import TypedResolveContext
 
 
@@ -21,16 +19,13 @@ class DbFieldResolver:
 
 
 class ListResolver:
-    __slots__ = ("_node", "_transformers")
+    __slots__ = ("_transformer",)
 
-    def __init__(self, node: AnalyzedNode, transformers: Sequence[QueryTransformer]):
-        self._node = node
-        self._transformers = transformers
+    def __init__(self, transformer: QueryTransformer):
+        self._transformer = transformer
 
     def __call__(self, parent: object | None, info: GraphQLResolveInfo, **kwargs: Any) -> Iterable:
-        query = transform_query(info, self._node)
-        for transformer in self._transformers:
-            query = transformer(query, self._node, info, **kwargs)
+        query = self._transformer.transform(info, kwargs)
 
         context: TypedResolveContext = info.context
         return context["db_session"].execute(query)

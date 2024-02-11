@@ -14,6 +14,7 @@ from sqlalchemy import Column, ForeignKeyConstraint
 from sqlalchemy.sql.type_api import TypeEngine
 
 from sqlgraphql._orm import get_implicit_relation
+from sqlgraphql._transformers import FieldRules
 from sqlgraphql._utils import CacheDictCM
 from sqlgraphql.exceptions import GQLBuilderException, InvalidOperationException
 from sqlgraphql.model import Link, QueryableNode
@@ -60,6 +61,7 @@ class AnalyzedLink:
 @dataclass(slots=True, kw_only=True)
 class NodeData:
     gql_type: GraphQLObjectType | None = None
+    field_rules: Mapping[str, FieldRules] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True, eq=False)

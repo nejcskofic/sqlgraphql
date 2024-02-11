@@ -20,6 +20,7 @@ from sqlgraphql._builders.sorting import SortableArgumentBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import ListResolver
+from sqlgraphql._transformers import QueryTransformer
 from sqlgraphql.model import QueryableNode
 
 
@@ -70,15 +71,17 @@ class SchemaBuilder:
             args.update(filterable_config.args)
             transformers.append(filterable_config.transformer)
 
+        transformer = QueryTransformer.create(analyzed_node, transformers)
+
         if pageable:
             field = self._offset_paged_builder.build_paged_list_field(
-                analyzed_node, args, transformers
+                analyzed_node, args, transformer
             )
         else:
             field = GraphQLField(
                 GraphQLList(object_type),
                 args=args,
-                resolve=ListResolver(analyzed_node, transformers),
+                resolve=ListResolver(transformer),
             )
 
         self._query_root_members[name] = field

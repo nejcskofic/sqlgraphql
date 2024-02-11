@@ -1,5 +1,5 @@
 import math
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from dataclasses import InitVar, dataclass, field
 from functools import cached_property
 from typing import Any
@@ -17,10 +17,9 @@ from sqlalchemy import Select, func
 from sqlalchemy.orm import Session
 
 from sqlgraphql._ast import AnalyzedNode
-from sqlgraphql._builders.util import QueryTransformer
 from sqlgraphql._gql import TypeMap
 from sqlgraphql._resolvers import FieldResolver
-from sqlgraphql._transformers import transform_query
+from sqlgraphql._transformers import QueryTransformer
 from sqlgraphql._utils import CacheDict
 from sqlgraphql.types import TypedResolveContext
 
@@ -57,14 +56,14 @@ class OffsetPagedArgumentBuilder:
         self,
         node: AnalyzedNode,
         args: dict[str, GraphQLArgument],
-        transformers: Sequence[QueryTransformer],
+        transformer: QueryTransformer,
     ) -> GraphQLField:
         paged_accessor_object = self._cache[node]
 
         return GraphQLField(
             GraphQLNonNull(paged_accessor_object),
             {**args, "page": GraphQLArgument(GraphQLInt), "pageSize": GraphQLArgument(GraphQLInt)},
-            resolve=PagedListResolver(node, transformers, DEFAULT_PAGE_SIZE),
+            resolve=PagedListResolver(transformer, DEFAULT_PAGE_SIZE),
         )
 
     def _construct_offset_paged_accessor_object(self, node: AnalyzedNode) -> GraphQLObjectType:
@@ -135,21 +134,16 @@ class OffsetPagedResult:
 
 
 class PagedListResolver:
-    __slots__ = ("_node", "_transformers", "_default_page_size")
+    __slots__ = ("_transformer", "_default_page_size")
 
-    def __init__(
-        self, node: AnalyzedNode, transformers: Sequence[QueryTransformer], default_page_size: int
-    ):
-        self._node = node
-        self._transformers = transformers
+    def __init__(self, transformer: QueryTransformer, default_page_size: int):
+        self._transformer = transformer
         self._default_page_size = default_page_size
 
     def __call__(
         self, parent: object | None, info: GraphQLResolveInfo, **kwargs: Any
     ) -> OffsetPagedResult:
-        query = transform_query(info, self._node, ["nodes"])
-        for transformer in self._transformers:
-            query = transformer(query, self._node, info, **kwargs)
+        query = self._transformer.transform(info, kwargs, ["nodes"])
 
         context: TypedResolveContext = info.context
         page = kwargs.get("page", 0)

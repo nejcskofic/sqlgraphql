@@ -1,10 +1,24 @@
-from typing import Iterator, NamedTuple, Sequence
+from __future__ import annotations
 
-from graphql import FieldNode, GraphQLResolveInfo, SelectionNode, FragmentSpreadNode, InlineFragmentNode
-from sqlalchemy import Select, ColumnElement
+from abc import ABC, abstractmethod
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeAlias
 
-from sqlgraphql._ast import AnalyzedNode
+from graphql import (
+    FieldNode,
+    FragmentSpreadNode,
+    GraphQLResolveInfo,
+    InlineFragmentNode,
+    SelectionNode,
+)
+from sqlalchemy import Select
+from sqlalchemy.sql.elements import ColumnElement
+
 from sqlgraphql.exceptions import InvalidOperationException
+
+if TYPE_CHECKING:
+    from sqlgraphql._ast import AnalyzedNode
 
 
 class _FieldInfo(NamedTuple):
@@ -67,28 +81,78 @@ class _FieldWalker:
             raise ValueError(f"Unknown SelectionNode type: {type(node)!r}")
 
 
-def transform_query(
-    info: GraphQLResolveInfo, node: AnalyzedNode, sub_path: Sequence[str] = ()
-) -> Select:
-    # TODO: move other transformations (filter, order by) here as well
-    assert len(info.field_nodes) == 1
-    walker = _FieldWalker(info.field_nodes[0], info)
-    requested_fields: list[ColumnElement] | None = None
-    for segment in sub_path:
-        if not walker.descend(segment):
-            requested_fields = []
-            break
+@dataclass(frozen=True, slots=True)
+class ColumnSelectRule:
+    selectable: ColumnElement
 
-    if requested_fields is None:
-        # rewrite query to select only desired fields
-        requested_fields = [
-            node.fields[gql_field_name].orm_field for gql_field_name, _ in walker.children()
-        ]
 
-    orig_query = node.node.query
-    if not requested_fields:
-        # Keep original query if there is no select
-        # Use case is pagination data only without actual select
-        return orig_query
-    else:
-        return orig_query.with_only_columns(*requested_fields)
+@dataclass(frozen=True, slots=True)
+class InlineObjectRule:
+    base_query: Select
+    fields: Mapping[str, FieldRules]
+
+
+FieldRules: TypeAlias = ColumnSelectRule | InlineObjectRule
+
+
+class ArgumentRule(ABC):
+    @abstractmethod
+    def apply(self, query: Select, info: GraphQLResolveInfo, args: dict[str, Any]) -> Select:
+        raise NotImplementedError()
+
+
+class QueryTransformer:
+    __slots__ = ("_root_rule", "_arg_rules")
+
+    def __init__(self, root_rule: InlineObjectRule, arg_rules: Sequence[ArgumentRule] = ()):
+        self._root_rule = root_rule
+        self._arg_rules = arg_rules
+
+    @classmethod
+    def create(
+        cls, node: AnalyzedNode, arg_transformers: Sequence[ArgumentRule] = ()
+    ) -> QueryTransformer:
+        assert node.data.field_rules
+        return cls(InlineObjectRule(node.node.query, node.data.field_rules), arg_transformers)
+
+    def transform(
+        self, info: GraphQLResolveInfo, args: dict[str, Any], sub_path: Sequence[str] = ()
+    ) -> Select:
+        query = self._root_rule.base_query
+        select_rules = self._root_rule.fields
+
+        assert len(info.field_nodes) == 1
+        walker = _FieldWalker(info.field_nodes[0], info)
+        requested_fields: list[ColumnElement] = []
+        for segment in sub_path:
+            if not walker.descend(segment):
+                # We may have paged request without actually going into field selection
+                break
+        else:
+            for field in walker.children():
+                transformer = select_rules.get(field.name)
+                if transformer is None:
+                    raise InvalidOperationException(
+                        f"Field '{field.name}' does not have transformer"
+                    )
+                match transformer:
+                    case None:
+                        raise InvalidOperationException(
+                            f"Field '{field.name}' does not have transformer"
+                        )
+                    case ColumnSelectRule():
+                        requested_fields.append(transformer.selectable)
+                    case _:
+                        raise NotImplementedError(
+                            f"Application of transformer '{type(transformer)!r}' is not supported"
+                        )
+
+        if requested_fields:
+            # Select only requested fields. Otherwise keep selection as is, since we require at
+            # least single field (and we may want to do filter on top of it)
+            query = query.with_only_columns(*requested_fields)
+
+        for rule in self._arg_rules:
+            query = rule.apply(query, info, args)
+
+        return query
