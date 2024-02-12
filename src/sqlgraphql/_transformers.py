@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeAlias
 
@@ -15,6 +15,7 @@ from graphql import (
 from sqlalchemy import Select
 from sqlalchemy.sql.elements import ColumnElement
 
+from sqlgraphql._utils import assert_not_none
 from sqlgraphql.exceptions import InvalidOperationException
 
 if TYPE_CHECKING:
@@ -89,7 +90,25 @@ class ColumnSelectRule:
 @dataclass(frozen=True, slots=True)
 class InlineObjectRule:
     base_query: Select
-    fields: Mapping[str, FieldRules]
+    fields_accessor: Mapping[str, FieldRules] | Callable[[], Mapping[str, FieldRules]]
+
+    @classmethod
+    def create(cls, node: AnalyzedNode) -> InlineObjectRule:
+        return cls(
+            node.node.query,
+            node.data.field_rules
+            if node.data.field_rules is not None
+            else lambda: assert_not_none(node.data.field_rules),
+        )
+
+    @property
+    def fields(self) -> Mapping[str, FieldRules]:
+        if isinstance(self.fields_accessor, Mapping):
+            return self.fields_accessor
+        else:
+            fields = self.fields_accessor()
+            object.__setattr__(self, "fields_accessor", fields)
+            return fields
 
 
 FieldRules: TypeAlias = ColumnSelectRule | InlineObjectRule
@@ -112,8 +131,7 @@ class QueryTransformer:
     def create(
         cls, node: AnalyzedNode, arg_transformers: Sequence[ArgumentRule] = ()
     ) -> QueryTransformer:
-        assert node.data.field_rules
-        return cls(InlineObjectRule(node.node.query, node.data.field_rules), arg_transformers)
+        return cls(InlineObjectRule.create(node), arg_transformers)
 
     def transform(
         self, info: GraphQLResolveInfo, args: dict[str, Any], sub_path: Sequence[str] = ()
