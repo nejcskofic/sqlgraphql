@@ -24,3 +24,5 @@ Library for generating SQL queries from GraphQL queries using graphene.
 - GQL validation via oneOf directive (custom print_schema + custom validator)
 - Multiple root queries/multiple root queries on non root object (verify query transformation work as expected)
 - Polymorphic DB models and GQL queries with fragments
+- Table alias:
+  - When automatically determine join points

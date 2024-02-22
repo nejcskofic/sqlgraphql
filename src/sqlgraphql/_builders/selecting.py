@@ -53,11 +53,7 @@ class ObjectBuilder:
                 GraphQLNonNull(gql_type) if entry.required else gql_type,
                 resolve=DbFieldResolver(entry.gql_name),
             )
-            rules[entry.gql_name] = ColumnSelectRule(
-                entry.orm_field.label(entry.gql_name)
-                if entry.gql_name != entry.orm_name
-                else entry.orm_field
-            )
+            rules[entry.gql_name] = ColumnSelectRule(entry.orm_field, entry.orm_ordinal_position)
 
         if node.links:
             # we need to process all children
@@ -75,7 +71,7 @@ class ObjectBuilder:
             field_arg: ThunkMapping[GraphQLField] = factory
 
             for link in node.links.values():
-                rules[link.gql_name] = InlineObjectRule.create(link.node)
+                rules[link.gql_name] = InlineObjectRule.create(link.node, link.join)
         else:
             field_arg = fields
             linked_nodes = []

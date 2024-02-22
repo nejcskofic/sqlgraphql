@@ -95,7 +95,7 @@ def insert_data(session_factory):
 
         for i in range(75, 100):
             session.add(
-                PostDB(user_id=user2.id, header=f"Post {i + 1}", body=bodies[i % len(bodies)])
+                PostDB(user_id=user2.id, header=f"Post {i + 1:03}", body=bodies[i % len(bodies)])
             )
         session.commit()
 

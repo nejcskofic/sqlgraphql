@@ -13,13 +13,11 @@ from graphql import (
     GraphQLObjectType,
     GraphQLResolveInfo,
 )
-from sqlalchemy import Select, func
-from sqlalchemy.orm import Session
 
 from sqlgraphql._ast import AnalyzedNode
 from sqlgraphql._gql import TypeMap
 from sqlgraphql._resolvers import FieldResolver
-from sqlgraphql._transformers import QueryTransformer
+from sqlgraphql._transformers import QueryBuilder, QueryExecutor
 from sqlgraphql._utils import CacheDict
 from sqlgraphql.types import TypedResolveContext
 
@@ -56,7 +54,7 @@ class OffsetPagedArgumentBuilder:
         self,
         node: AnalyzedNode,
         args: dict[str, GraphQLArgument],
-        transformer: QueryTransformer,
+        transformer: QueryBuilder,
     ) -> GraphQLField:
         paged_accessor_object = self._cache[node]
 
@@ -109,43 +107,33 @@ class OffsetPageInfo:
 
 
 class OffsetPagedResult:
-    def __init__(self, query: Select, session: Session, page: int, page_size: int):
+    def __init__(self, query: QueryExecutor, page: int, page_size: int):
         self._query = query
-        self._session = session
         self._page = page
         self._page_size = page_size
 
     @cached_property
     def nodes(self) -> Iterable:
-        paged_query = self._query.limit(self._page_size).offset(self._page * self._page_size)
-        return self._session.execute(paged_query)
+        return self._query.execute_with_pagination(self._page, self._page_size)
 
     @cached_property
     def page_info(self) -> OffsetPageInfo:
-        return OffsetPageInfo(self._get_record_count, self._page, self._page_size)
-
-    def _get_record_count(self) -> int:
-        page_info_query = self._query.with_only_columns(
-            func.count(), maintain_column_froms=True
-        ).order_by(None)
-        # alternative
-        # page_info_query = select(func.count()).select_from(self._query.order_by(None).subquery())
-        return self._session.execute(page_info_query).scalar_one()
+        return OffsetPageInfo(self._query.record_count, self._page, self._page_size)
 
 
 class PagedListResolver:
     __slots__ = ("_transformer", "_default_page_size")
 
-    def __init__(self, transformer: QueryTransformer, default_page_size: int):
+    def __init__(self, transformer: QueryBuilder, default_page_size: int):
         self._transformer = transformer
         self._default_page_size = default_page_size
 
     def __call__(
         self, parent: object | None, info: GraphQLResolveInfo, **kwargs: Any
     ) -> OffsetPagedResult:
-        query = self._transformer.transform(info, kwargs, ["nodes"])
-
         context: TypedResolveContext = info.context
+        query = self._transformer.build(info, kwargs, context["db_session"], ["nodes"])
+
         page = kwargs.get("page", 0)
         page_size = kwargs.get("pageSize", self._default_page_size)
-        return OffsetPagedResult(query, context["db_session"], page, page_size)
+        return OffsetPagedResult(query, page, page_size)

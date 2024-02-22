@@ -39,3 +39,42 @@ class TestN1Selection:
             '"""Date scalar type represents date in ISO format (YYYY-MM-DD)."""\n'
             "scalar Date"
         )
+
+    def test_select_relation(self, schema, executor, query_watcher):
+        result = executor(
+            schema,
+            """
+            query {
+                posts {
+                    header
+                    user {
+                        id
+                        name
+                        registrationDate
+                    }
+                }
+            }
+            """,
+        )
+        assert not result.errors
+        assert result.data == {
+            "posts": [
+                dict(
+                    header=f"Post {i + 1:03}",
+                    user=dict(id=1, name="user1", registrationDate="2000-01-01"),
+                )
+                for i in range(75)
+            ]
+            + [
+                dict(
+                    header=f"Post {i + 1:03}",
+                    user=dict(id=2, name="user2", registrationDate="2000-01-02"),
+                )
+                for i in range(75, 100)
+            ]
+        }
+        assert query_watcher.executed_queries == [
+            "SELECT posts.header, users.id AS __e1_id, users.name AS __e1_name, "
+            'users.registration_date AS "__e1_registrationDate" FROM posts LEFT OUTER '
+            "JOIN users ON posts.user_id = users.id ORDER BY posts.header"
+        ]

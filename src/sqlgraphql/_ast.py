@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+import itertools
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Literal
 
 import sqlalchemy
 from graphql import (
@@ -10,10 +12,9 @@ from graphql import (
     GraphQLObjectType,
     GraphQLScalarType,
 )
-from sqlalchemy import Column, ForeignKeyConstraint
+from sqlalchemy import Column, Select, Table
 from sqlalchemy.sql.type_api import TypeEngine
 
-from sqlgraphql._orm import get_implicit_relation
 from sqlgraphql._transformers import FieldRules
 from sqlgraphql._utils import CacheDictCM
 from sqlgraphql.exceptions import GQLBuilderException, InvalidOperationException
@@ -30,6 +31,7 @@ class FieldData:
 class AnalyzedField:
     orm_name: str
     orm_field: sqlalchemy.ColumnElement
+    orm_ordinal_position: int
     required: bool
     gql_name: str
     data: FieldData = field(default_factory=FieldData, compare=False)
@@ -37,6 +39,12 @@ class AnalyzedField:
     @property
     def orm_type(self) -> TypeEngine:
         return self.orm_field.type
+
+
+@dataclass(frozen=True)
+class JoinPoint:
+    kind: Literal["0-n:1", "1:0-n"]
+    joins: Sequence[tuple[Column, Column]]
 
 
 @dataclass(slots=True, kw_only=True)
@@ -48,7 +56,7 @@ class LinkData:
 class AnalyzedLink:
     gql_name: str
     node_accessor: Callable[[], AnalyzedNode]
-    relationship: ForeignKeyConstraint
+    join: JoinPoint
     data: LinkData = field(default_factory=LinkData, compare=False)
 
     @property
@@ -92,7 +100,7 @@ class Analyzer:
         columns = node.query.selected_columns
         field_name_converter = self._field_name_converter
         analyzed_fields = {}
-        for column in columns:
+        for idx, column in enumerate(columns):
             if isinstance(column, Column) and column.nullable is not None:
                 required = not column.nullable
             else:
@@ -104,6 +112,7 @@ class Analyzer:
                 orm_name=column.name,
                 gql_name=gql_field_name,
                 orm_field=column,
+                orm_ordinal_position=idx,
                 required=required,
             )
 
@@ -128,7 +137,7 @@ class Analyzer:
         self, node: QueryableNode, name: str, remote_node: QueryableNode
     ) -> AnalyzedLink:
         try:
-            relation = get_implicit_relation(node.query, remote_node.query)
+            join_point = _get_implicit_relation(node.query, remote_node.query)
         except InvalidOperationException as e:
             raise GQLBuilderException(
                 f"Failed to determine implicit relation for member '{name}'"
@@ -140,5 +149,51 @@ class Analyzer:
         return AnalyzedLink(
             gql_name=name,
             node_accessor=lambda: self._analyzed_nodes[remote_node],
-            relationship=relation,
+            join=join_point,
         )
+
+
+def _get_implicit_relation(source_query: Select, remote_query: Select) -> JoinPoint:
+    candidate: JoinPoint | None = None
+
+    for entry in _iterate_implicit_relations(source_query, remote_query):
+        if candidate is not None:
+            raise InvalidOperationException(
+                "Expected single candidate relationship, found more than one."
+            )
+        candidate = entry
+
+    if candidate is None:
+        raise InvalidOperationException("Expected single candidate relationship, found 0.")
+
+    return candidate
+
+
+def _iterate_implicit_relations(source_query: Select, remote_query: Select) -> Iterator[JoinPoint]:
+    source_iter = (
+        source_from
+        for source_from in source_query.get_final_froms()
+        if isinstance(source_from, Table)
+    )
+    remote_iter = (
+        remote_from
+        for remote_from in remote_query.get_final_froms()
+        if isinstance(remote_from, Table)
+    )
+    # TODO: Expand analysis to required + primary key
+    for source_from, remote_from in itertools.product(source_iter, remote_iter):
+        for fk in source_from.foreign_key_constraints:
+            if fk.referred_table is not remote_from:
+                continue
+
+            yield JoinPoint(
+                kind="0-n:1", joins=tuple(zip(fk.columns, remote_from.primary_key.columns))
+            )
+
+        for fk in remote_from.foreign_key_constraints:
+            if fk.referred_table is not source_from:
+                continue
+
+            yield JoinPoint(
+                kind="1:0-n", joins=tuple(zip(remote_from.primary_key.columns, fk.columns))
+            )
