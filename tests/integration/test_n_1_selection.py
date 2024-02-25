@@ -27,7 +27,7 @@ class TestN1Selection:
             "  userId: Int!\n"
             "  header: String!\n"
             "  body: String!\n"
-            "  user: User\n"
+            "  user: User!\n"
             "}\n"
             "\n"
             "type User {\n"

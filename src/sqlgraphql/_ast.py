@@ -43,8 +43,11 @@ class AnalyzedField:
 
 @dataclass(frozen=True)
 class JoinPoint:
-    kind: Literal["0-n:1", "1:0-n"]
+    kind: Literal["0", "1", "n"]
     joins: Sequence[tuple[Column, Column]]
+
+    def is_required(self) -> bool:
+        return self.kind == "1"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -180,14 +183,16 @@ def _iterate_implicit_relations(source_query: Select, remote_query: Select) -> I
         for remote_from in remote_query.get_final_froms()
         if isinstance(remote_from, Table)
     )
-    # TODO: Expand analysis to required + primary key
     for source_from, remote_from in itertools.product(source_iter, remote_iter):
         for fk in source_from.foreign_key_constraints:
             if fk.referred_table is not remote_from:
                 continue
 
+            is_optional = any(column.nullable for column in fk.columns)
+
             yield JoinPoint(
-                kind="0-n:1", joins=tuple(zip(fk.columns, remote_from.primary_key.columns))
+                kind="0" if is_optional else "1",
+                joins=tuple(zip(fk.columns, remote_from.primary_key.columns)),
             )
 
         for fk in remote_from.foreign_key_constraints:
@@ -195,5 +200,5 @@ def _iterate_implicit_relations(source_query: Select, remote_query: Select) -> I
                 continue
 
             yield JoinPoint(
-                kind="1:0-n", joins=tuple(zip(remote_from.primary_key.columns, fk.columns))
+                kind="n", joins=tuple(zip(remote_from.primary_key.columns, fk.columns))
             )

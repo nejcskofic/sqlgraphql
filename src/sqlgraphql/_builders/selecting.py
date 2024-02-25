@@ -63,8 +63,10 @@ class ObjectBuilder:
             # we need to lazy load fields so that recursive definitions work
             def factory() -> Mapping[str, GraphQLField]:
                 for link in links:
-                    # TODO: is relationship required or not?
-                    fields[link.gql_name] = GraphQLField(assert_not_none(link.node.data.gql_type))
+                    gql_type = assert_not_none(link.node.data.gql_type)
+                    fields[link.gql_name] = GraphQLField(
+                        GraphQLNonNull(gql_type) if link.join.is_required() else gql_type
+                    )
 
                 return fields
 
