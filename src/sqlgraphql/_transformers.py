@@ -13,9 +13,9 @@ from graphql import (
     InlineFragmentNode,
     SelectionNode,
 )
-from sqlalchemy import FromClause, Row, Select, func
+from sqlalchemy import Column, FromClause, Row, Select, Subquery, func
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.elements import ColumnElement, literal
 
 from sqlgraphql._utils import assert_not_none
 from sqlgraphql.exceptions import InvalidOperationException
@@ -187,11 +187,14 @@ class QueryExecutor:
         record = Record.from_row(row)
         for mapper in self._mappers:
             child_record = Record()
+            entity_exists = False
             for name, value in record.items():
-                if name.startswith(mapper.prefix):
+                if name == mapper.prefix:
+                    entity_exists = value is not None
+                elif name.startswith(mapper.prefix):
                     child_record[name[len(mapper.prefix) :]] = value
 
-            if len(child_record) == 0:
+            if not entity_exists or len(child_record) == 0:
                 continue
 
             base_record = record
@@ -237,7 +240,8 @@ class QueryBuilder:
                 break
         else:
             processing_queue: deque[_FieldInfo | Literal[-1]] = deque(walker.children())
-            context_queue = deque([(self._root_rule, "")])
+            context_queue: deque[tuple[InlineObjectRule, str, Subquery | None]] = deque()
+            context_queue.append((self._root_rule, "", None))
             entity_counter = 1
 
             return_cmd: Literal[-1] = -1
@@ -249,16 +253,22 @@ class QueryBuilder:
                     context_queue.pop()
                     continue
 
-                current_context, alias_prefix = context_queue[-1]
-                transformer = current_context.fields.get(field.name)
+                current_rule, alias_prefix, current_subquery = context_queue[-1]
+                transformer = current_rule.fields.get(field.name)
                 match transformer:
                     case None:
                         raise InvalidOperationException(
                             f"Field '{field.name}' does not have transformer"
                         )
                     case ColumnSelectRule():
-                        sql_name = getattr(transformer.selectable, "name", None)
                         selectable = transformer.selectable
+                        sql_name = getattr(selectable, "name", None)
+                        if current_subquery is not None:
+                            if sql_name is None:
+                                raise InvalidOperationException(
+                                    "Cannot select over non named column via subquery"
+                                )
+                            selectable = current_subquery.columns[sql_name]
                         if sql_name != field.name or alias_prefix:
                             selectable = selectable.label(f"{alias_prefix}{field.name}")
                         requested_fields.append(selectable)
@@ -268,17 +278,34 @@ class QueryBuilder:
 
                         target_from = transformer.reduce_select()
                         if target_from is not None:
+                            for column in transformer.base_query.selected_columns:
+                                if isinstance(column, Column) and not column.nullable:
+                                    break
+                            else:
+                                # couldn't find column via which we will determine if
+                                # entity is present, switch to subquery mode
+                                target_from = None
+
+                        if target_from is not None:
+                            subquery = None
+                            requested_fields.append(column.is_not(None).label(alias_prefix))
                             query = query.outerjoin(
                                 target_from, self._construct_join_clause(transformer.join)
                             )
                         else:
-                            raise NotImplementedError()
+                            subquery = transformer.base_query.add_columns(
+                                literal(True).label(alias_prefix)
+                            ).alias()
+                            requested_fields.append(subquery.columns[alias_prefix])
+                            query = query.outerjoin(
+                                subquery, self._construct_join_clause(transformer.join, subquery)
+                            )
 
                         # descend into field
                         walker.descend(field.name)
                         processing_queue.appendleft(return_cmd)
                         processing_queue.extendleft(reversed(list(walker.children())))
-                        context_queue.append((transformer, alias_prefix))
+                        context_queue.append((transformer, alias_prefix, subquery))
 
                         # store mapper for this object
                         mappers.append(
@@ -300,12 +327,20 @@ class QueryBuilder:
         return QueryExecutor(query, session, mappers)
 
     @classmethod
-    def _construct_join_clause(cls, join: JoinPoint | None) -> ColumnElement:
+    def _construct_join_clause(
+        cls, join: JoinPoint | None, target_subquery: Subquery | None = None
+    ) -> ColumnElement:
         if join is None:
             raise ValueError("Cannot construct join clause without join point")
+
         joins = join.joins
+        target: ColumnElement
         source, target = joins[0]
+        if target_subquery is not None:
+            target = target_subquery.columns[target.name]
         condition = source == target
         for source, target in joins[1:]:
+            if target_subquery is not None:
+                target = target_subquery.columns[target.name]
             condition = condition and (source == target)
         return condition

@@ -4,6 +4,7 @@ import itertools
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Literal
 
 import sqlalchemy
@@ -46,13 +47,16 @@ class JoinPoint:
     kind: Literal["0", "1", "n"]
     joins: Sequence[tuple[Column, Column]]
 
-    def is_required(self) -> bool:
-        return self.kind == "1"
-
 
 @dataclass(slots=True, kw_only=True)
 class LinkData:
     remote_node: AnalyzedNode | None = None
+
+
+class LinkKind(Enum):
+    SINGLE_OPTIONAL = auto()
+    SINGLE_REQUIRED = auto()
+    MULTIPLE = auto()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -60,6 +64,7 @@ class AnalyzedLink:
     gql_name: str
     node_accessor: Callable[[], AnalyzedNode]
     join: JoinPoint
+    kind: LinkKind
     data: LinkData = field(default_factory=LinkData, compare=False)
 
     @property
@@ -149,10 +154,38 @@ class Analyzer:
                 f"Relationship should be specified explicitly."
             )
 
+        match join_point.kind:
+            case "0":
+                kind = LinkKind.SINGLE_OPTIONAL
+            case "1":
+                remote_query = remote_node.query
+                if (
+                    remote_query.whereclause is not None
+                    or len(remote_query.get_final_froms()) != 1
+                ):
+                    # If we have non-trivial target query, we cannot be sure if required
+                    # relation will actually materialize as record always being available.
+                    # For example:
+                    # - If there is where expression, then filter can remove record which
+                    #   relation points to
+                    # - If we have more than single table, then if there is inner join it can
+                    #   remove record (similar to filter). If we are joining on left join table
+                    #   record may not be there if primary table is not connected to that record.
+                    # The only exception could be if we are joining on primary table where all
+                    # other joins are left joins and no filter expression.
+                    kind = LinkKind.SINGLE_OPTIONAL
+                else:
+                    kind = LinkKind.SINGLE_REQUIRED
+            case "n":
+                kind = LinkKind.MULTIPLE
+            case _:
+                raise InvalidOperationException("Unknown kind")
+
         return AnalyzedLink(
             gql_name=name,
             node_accessor=lambda: self._analyzed_nodes[remote_node],
             join=join_point,
+            kind=kind,
         )
 
 

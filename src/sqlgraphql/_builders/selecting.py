@@ -5,19 +5,21 @@ from contextlib import contextmanager
 from graphql import (
     GraphQLEnumType,
     GraphQLField,
+    GraphQLList,
     GraphQLNonNull,
     GraphQLObjectType,
     GraphQLScalarType,
     ThunkMapping,
 )
 
-from sqlgraphql._ast import AnalyzedField, AnalyzedNode
+from sqlgraphql._ast import AnalyzedField, AnalyzedNode, LinkKind
 from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
 from sqlgraphql._resolvers import DbFieldResolver
 from sqlgraphql._transformers import ColumnSelectRule, FieldRules, InlineObjectRule
 from sqlgraphql._utils import assert_not_none
+from sqlgraphql.exceptions import InvalidOperationException
 
 
 class ObjectBuilder:
@@ -63,17 +65,27 @@ class ObjectBuilder:
             # we need to lazy load fields so that recursive definitions work
             def factory() -> Mapping[str, GraphQLField]:
                 for link in links:
-                    gql_type = assert_not_none(link.node.data.gql_type)
-                    fields[link.gql_name] = GraphQLField(
-                        GraphQLNonNull(gql_type) if link.join.is_required() else gql_type
+                    gql_type: GraphQLObjectType | GraphQLNonNull | GraphQLList = assert_not_none(
+                        link.node.data.gql_type
                     )
+                    if link.kind == LinkKind.SINGLE_REQUIRED:
+                        gql_type = GraphQLNonNull(gql_type)
+                    elif link.kind == LinkKind.MULTIPLE:
+                        gql_type = GraphQLList(GraphQLNonNull(gql_type))
+                    fields[link.gql_name] = GraphQLField(gql_type)
 
                 return fields
 
             field_arg: ThunkMapping[GraphQLField] = factory
 
             for link in node.links.values():
-                rules[link.gql_name] = InlineObjectRule.create(link.node, link.join)
+                match link.kind:
+                    case LinkKind.SINGLE_OPTIONAL | LinkKind.SINGLE_REQUIRED:
+                        rules[link.gql_name] = InlineObjectRule.create(link.node, link.join)
+                    case LinkKind.MULTIPLE:
+                        raise NotImplementedError()
+                    case _:
+                        raise InvalidOperationException("Unknown kind")
         else:
             field_arg = fields
             linked_nodes = []
