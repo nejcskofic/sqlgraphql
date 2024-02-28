@@ -132,7 +132,7 @@ class PagedListResolver:
         self, parent: object | None, info: GraphQLResolveInfo, **kwargs: Any
     ) -> OffsetPagedResult:
         context: TypedResolveContext = info.context
-        query = self._transformer.build(info, kwargs, context["db_session"], ["nodes"])
+        query = self._transformer.build(parent, info, kwargs, context["db_session"], ["nodes"])
 
         page = kwargs.get("page", 0)
         page_size = kwargs.get("pageSize", self._default_page_size)

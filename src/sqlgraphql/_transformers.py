@@ -127,13 +127,45 @@ class InlineObjectRule:
         return None
 
 
-FieldRules: TypeAlias = ColumnSelectRule | InlineObjectRule
+@dataclass(frozen=True, slots=True)
+class LinkDataRule:
+    selectables: Sequence[Column]
+
+
+FieldRules: TypeAlias = ColumnSelectRule | InlineObjectRule | LinkDataRule
 
 
 class ArgumentRule(ABC):
     @abstractmethod
-    def apply(self, query: Select, info: GraphQLResolveInfo, args: dict[str, Any]) -> Select:
+    def apply(
+        self, query: Select, root: Any, info: GraphQLResolveInfo, args: dict[str, Any]
+    ) -> Select:
         raise NotImplementedError()
+
+
+class ApplyLinkRule(ArgumentRule):
+    __slots__ = ("_join",)
+
+    def __init__(self, join: JoinPoint):
+        self._join = join
+
+    def apply(
+        self, query: Select, root: Any, info: GraphQLResolveInfo, args: dict[str, Any]
+    ) -> Select:
+        accessor = self._get_accessor(root)
+        left, right = self._join.joins[0]
+        condition = right == accessor(f"__{left.name}")
+        for left, right in self._join.joins[1:]:
+            condition = condition and right == accessor(f"__{left.name}")
+
+        return query.where(condition)
+
+    @classmethod
+    def _get_accessor(cls, root: Any) -> Callable[[str], Any]:
+        if isinstance(root, Record):
+            return lambda key: root[key]
+        else:
+            return lambda key: getattr(root, key)
 
 
 class Record(dict[str, Any]):
@@ -190,7 +222,7 @@ class QueryExecutor:
             entity_exists = False
             for name, value in record.items():
                 if name == mapper.prefix:
-                    entity_exists = value is not None
+                    entity_exists = bool(value)
                 elif name.startswith(mapper.prefix):
                     child_record[name[len(mapper.prefix) :]] = value
 
@@ -223,6 +255,7 @@ class QueryBuilder:
 
     def build(
         self,
+        root: Any,
         info: GraphQLResolveInfo,
         args: dict[str, Any],
         session: Session,
@@ -272,6 +305,15 @@ class QueryBuilder:
                         if sql_name != field.name or alias_prefix:
                             selectable = selectable.label(f"{alias_prefix}{field.name}")
                         requested_fields.append(selectable)
+                    case LinkDataRule():
+                        # TODO: determine if columns are already selected and don't reselect
+                        for selectable in transformer.selectables:
+                            sql_name = selectable.name
+                            if current_subquery is not None:
+                                selectable = current_subquery.columns[sql_name]
+                            requested_fields.append(
+                                selectable.label(f"{alias_prefix}__{sql_name}")
+                            )
                     case InlineObjectRule():
                         alias_prefix = f"__e{entity_counter}_"
                         entity_counter += 1
@@ -322,7 +364,7 @@ class QueryBuilder:
             query = query.with_only_columns(*requested_fields)
 
         for rule in self._arg_rules:
-            query = rule.apply(query, info, args)
+            query = rule.apply(query, root, info, args)
 
         return QueryExecutor(query, session, mappers)
 

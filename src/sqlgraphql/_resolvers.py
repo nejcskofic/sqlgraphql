@@ -29,7 +29,7 @@ class ListResolver:
 
     def __call__(self, parent: object | None, info: GraphQLResolveInfo, **kwargs: Any) -> Iterable:
         context: TypedResolveContext = info.context
-        return self._transformer.build(info, kwargs, context["db_session"]).execute()
+        return self._transformer.build(parent, info, kwargs, context["db_session"]).execute()
 
 
 class FieldResolver:

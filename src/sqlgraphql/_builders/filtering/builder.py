@@ -137,7 +137,9 @@ class FilterQueryTransformer(ArgumentRule):
     def __init__(self, apply_map: Mapping[tuple[str, str], FilterOp]):
         self._apply_map = apply_map
 
-    def apply(self, query: Select, info: GraphQLResolveInfo, args: dict[str, Any]) -> Select:
+    def apply(
+        self, query: Select, root: Any, info: GraphQLResolveInfo, args: dict[str, Any]
+    ) -> Select:
         filter: list[_EntityFilterData] = args.pop("filter", [])
         if not filter:
             return query

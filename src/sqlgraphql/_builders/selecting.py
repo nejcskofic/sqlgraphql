@@ -12,12 +12,19 @@ from graphql import (
     ThunkMapping,
 )
 
-from sqlgraphql._ast import AnalyzedField, AnalyzedNode, LinkKind
+from sqlgraphql._ast import AnalyzedField, AnalyzedLink, AnalyzedNode, LinkKind
 from sqlgraphql._builders.enum import EnumBuilder
 from sqlgraphql._gql import ScalarTypeRegistry, TypeMap
 from sqlgraphql._orm import TypeRegistry
-from sqlgraphql._resolvers import DbFieldResolver
-from sqlgraphql._transformers import ColumnSelectRule, FieldRules, InlineObjectRule
+from sqlgraphql._resolvers import DbFieldResolver, ListResolver
+from sqlgraphql._transformers import (
+    ApplyLinkRule,
+    ColumnSelectRule,
+    FieldRules,
+    InlineObjectRule,
+    LinkDataRule,
+    QueryBuilder,
+)
 from sqlgraphql._utils import assert_not_none
 from sqlgraphql.exceptions import InvalidOperationException
 
@@ -61,6 +68,18 @@ class ObjectBuilder:
             # we need to process all children
             linked_nodes = [link.node for link in node.links.values()]
             links = [link for link in node.links.values()]
+            link_resolvers = {}
+
+            for link in node.links.values():
+                match link.kind:
+                    case LinkKind.SINGLE_OPTIONAL | LinkKind.SINGLE_REQUIRED:
+                        rules[link.gql_name] = InlineObjectRule.create(link.node, link.join)
+                    case LinkKind.MULTIPLE:
+                        runtime_link, link_resolver = self._create_runtime_link(link)
+                        rules[link.gql_name] = runtime_link
+                        link_resolvers[link.gql_name] = link_resolver
+                    case _:
+                        raise InvalidOperationException("Unknown kind")
 
             # we need to lazy load fields so that recursive definitions work
             def factory() -> Mapping[str, GraphQLField]:
@@ -69,23 +88,23 @@ class ObjectBuilder:
                         link.node.data.gql_type
                     )
                     if link.kind == LinkKind.SINGLE_REQUIRED:
-                        gql_type = GraphQLNonNull(gql_type)
+                        gql_field = GraphQLField(GraphQLNonNull(gql_type))
                     elif link.kind == LinkKind.MULTIPLE:
-                        gql_type = GraphQLList(GraphQLNonNull(gql_type))
-                    fields[link.gql_name] = GraphQLField(gql_type)
+                        gql_field = GraphQLField(
+                            GraphQLList(GraphQLNonNull(gql_type)),
+                            # TODO: allow other strategies (such as paginations,
+                            #       anchored filters, etc)
+                            resolve=ListResolver(
+                                QueryBuilder.create(link.node, [link_resolvers[link.gql_name]])
+                            ),
+                        )
+                    else:
+                        gql_field = GraphQLField(gql_type)
+                    fields[link.gql_name] = gql_field
 
                 return fields
 
             field_arg: ThunkMapping[GraphQLField] = factory
-
-            for link in node.links.values():
-                match link.kind:
-                    case LinkKind.SINGLE_OPTIONAL | LinkKind.SINGLE_REQUIRED:
-                        rules[link.gql_name] = InlineObjectRule.create(link.node, link.join)
-                    case LinkKind.MULTIPLE:
-                        raise NotImplementedError()
-                    case _:
-                        raise InvalidOperationException("Unknown kind")
         else:
             field_arg = fields
             linked_nodes = []
@@ -119,3 +138,9 @@ class ObjectBuilder:
         data.python_type = python_type = self._orm_type_registry.get_python_type(field.orm_type)
         data.gql_type = self._gql_type_registry.get_scalar_type(python_type)
         return data.gql_type
+
+    @classmethod
+    def _create_runtime_link(cls, link: AnalyzedLink) -> tuple[LinkDataRule, ApplyLinkRule]:
+        return LinkDataRule(selectables=[left for left, _ in link.join.joins]), ApplyLinkRule(
+            link.join
+        )

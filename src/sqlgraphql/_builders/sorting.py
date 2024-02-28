@@ -62,7 +62,9 @@ class _TransformSortableQuery(ArgumentRule):
     def __init__(self, node: AnalyzedNode):
         self._node = node
 
-    def apply(self, query: Select, info: GraphQLResolveInfo, args: dict[str, Any]) -> Select:
+    def apply(
+        self, query: Select, root: Any, info: GraphQLResolveInfo, args: dict[str, Any]
+    ) -> Select:
         sort: list[dict[str, SortDirection]] = args.pop("sort", [])
         for part in sort:
             field_name, direction = get_single_key_value(part)

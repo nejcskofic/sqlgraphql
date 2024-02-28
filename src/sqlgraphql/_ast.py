@@ -47,6 +47,10 @@ class JoinPoint:
     kind: Literal["0", "1", "n"]
     joins: Sequence[tuple[Column, Column]]
 
+    def __post_init__(self) -> None:
+        if not self.joins:
+            raise ValueError("There should be at least one join pair")
+
 
 @dataclass(slots=True, kw_only=True)
 class LinkData:
@@ -233,5 +237,5 @@ def _iterate_implicit_relations(source_query: Select, remote_query: Select) -> I
                 continue
 
             yield JoinPoint(
-                kind="n", joins=tuple(zip(remote_from.primary_key.columns, fk.columns))
+                kind="n", joins=tuple(zip(source_from.primary_key.columns, fk.columns))
             )
