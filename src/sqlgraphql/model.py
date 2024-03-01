@@ -5,22 +5,22 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import Select
 
-from sqlgraphql._utils import FrozenMap
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Link:
     node: QueryableNode
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class QueryableNode:
     name: str
     query: Select
     extra: Mapping[str, Extra] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "extra", FrozenMap(self.extra))
+    def define_field(self, name: str, data: Extra) -> None:
+        extra = dict(self.extra)
+        extra[name] = data
+        object.__setattr__(self, "extra", extra)
 
 
 LinkType = QueryableNode | Link

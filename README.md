@@ -16,13 +16,13 @@ Library for generating SQL queries from GraphQL queries using graphene.
 - Support selection of single entry (by ID)
 - Efficient queries
   - Defining relations (1..n, n..1, n..n?)
-  - Walking AST to create single query for (n..1 relation)
-  - Batching or other queries (n..n relations)
+  - Many/many relations (m..n relations)
   - Walking AST breath first instead of depth first?
-  - Recursive definitions
 - Mixed mode definitions (DB query and other pure python side resolvers)
 - GQL validation via oneOf directive (custom print_schema + custom validator)
 - Multiple root queries/multiple root queries on non root object (verify query transformation work as expected)
 - Polymorphic DB models and GQL queries with fragments
-- Table alias:
-  - When automatically determine join points
+- Paginated queries as sublists
+- Custom definitions of relationships between nodes
+- Async support
+  - Data loader pattern/batching queries

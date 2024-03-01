@@ -1,6 +1,6 @@
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable
 from contextlib import AbstractContextManager
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -25,34 +25,6 @@ class CacheDictCM(dict[K, V]):
         with self._default_factory(key) as value:
             self[key] = value
         return value
-
-
-class FrozenMap(Generic[K, V], Mapping[K, V]):
-    __slots__ = ("_dict", "_hash")
-
-    def __init__(self, data: Mapping[K, V]) -> None:
-        self._dict: Mapping[K, V] = dict(data)
-        self._hash: int | None = None
-
-    def __getitem__(self, key: K) -> V:
-        return self._dict[key]
-
-    def __contains__(self, key: object) -> bool:
-        return key in self._dict
-
-    def __iter__(self) -> Iterator[K]:
-        return iter(self._dict)
-
-    def __len__(self) -> int:
-        return len(self._dict)
-
-    def __repr__(self) -> str:
-        return f"FrozenMap({repr(self._dict)})"
-
-    def __hash__(self) -> int:
-        if self._hash is None:
-            self._hash = hash(frozenset(self._dict.items()))
-        return self._hash
 
 
 T = TypeVar("T")
